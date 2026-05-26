@@ -10,8 +10,8 @@ from ta.volatility import AverageTrueRange
 # CONFIG
 # ============================================================
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_TOKEN = os.getenv("8723271611:AAFYDVvzWn3_iWp60fwYwBDiDAYfTLgLIq0")
+TELEGRAM_CHAT_ID = os.getenv("315991729")
 
 SCAN_INTERVAL = 300
 
