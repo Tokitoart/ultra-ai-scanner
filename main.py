@@ -1,577 +1,409 @@
-
 import requests
 import pandas as pd
 import numpy as np
 import time
-import os
-from ta.volatility import AverageTrueRange
+from datetime import datetime
 
-# ============================================================
-# CONFIG
-# ============================================================
+# =========================================================
+# TELEGRAM
+# =========================================================
 
-TELEGRAM_TOKEN = os.getenv("8723271611:AAFYDVvzWn3_iWp60fwYwBDiDAYfTLgLIq0")
-TELEGRAM_CHAT_ID = os.getenv("315991729")
+BOT_TOKEN = "8723271611:AAFYDVvzWn3_iWp60fwYwBDiDAYfTLgLIq0"
+CHAT_ID = "315991729"
+
+# =========================================================
+# SETTINGS
+# =========================================================
 
 SCAN_INTERVAL = 300
 
-TIMEFRAMES = {
-    "5m": "5m",
-    "15m": "15m",
-    "1H": "1H"
-}
+TIMEFRAMES = ["5m", "15m", "1H"]
 
-# ============================================================
-# TELEGRAM
-# ============================================================
+sent_alerts = set()
 
-def send_telegram(message):
+# =========================================================
+# TELEGRAM SEND
+# =========================================================
+
+def send_telegram(text):
+
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML"
+    }
 
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        r = requests.post(url, json=payload, timeout=10)
 
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message,
-            "parse_mode": "HTML"
-        }
+        print("TG STATUS:", r.status_code)
 
-        requests.post(url, data=payload, timeout=10)
+        if r.status_code != 200:
+            print(r.text)
 
     except Exception as e:
         print("TELEGRAM ERROR:", e)
 
-# ============================================================
+# =========================================================
 # GET TOP COINS
-# ============================================================
+# =========================================================
 
-def get_top_okx_symbols(limit=100):
+def get_top_pairs():
 
     try:
 
         url = "https://www.okx.com/api/v5/market/tickers?instType=SWAP"
 
-        data = requests.get(url, timeout=10).json()["data"]
+        data = requests.get(url).json()["data"]
 
-        coins = []
+        filtered = []
 
-        for item in data:
+        for x in data:
 
-            symbol = item["instId"]
+            symbol = x["instId"]
 
             if "USDT-SWAP" not in symbol:
                 continue
 
-            try:
-                vol = float(item["volCcy24h"])
-            except:
-                vol = 0
+            vol = float(x["volCcy24h"])
 
-            coins.append((symbol, vol))
+            filtered.append((symbol, vol))
 
-        coins = sorted(coins, key=lambda x: x[1], reverse=True)
+        filtered = sorted(filtered, key=lambda x: x[1], reverse=True)
 
-        return [x[0] for x in coins[:limit]]
+        return [x[0] for x in filtered[:100]]
 
-    except:
+    except Exception as e:
+        print("TOP COINS ERROR:", e)
         return []
 
-# ============================================================
+# =========================================================
 # GET CANDLES
-# ============================================================
+# =========================================================
 
-def get_okx_data(symbol, timeframe, limit=200):
+def get_okx_data(symbol, timeframe="15m", limit=200):
 
-    try:
-
-        url = f"https://www.okx.com/api/v5/market/candles?instId={symbol}&bar={timeframe}&limit={limit}"
-
-        data = requests.get(url, timeout=10).json()["data"]
-
-        df = pd.DataFrame(data)
-
-        df = df.iloc[:, :6]
-
-        df.columns = [
-            "ts",
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume"
-        ]
-
-        df = df.astype(float)
-
-        df = df.sort_values("ts")
-
-        return df
-
-    except:
-        return None
-
-# ============================================================
-# MARKET STRUCTURE
-# ============================================================
-
-def detect_market_structure(df):
-
-    highs = df["high"].tail(20).values
-    lows = df["low"].tail(20).values
-
-    hh = highs[-1] > highs[-5]
-    hl = lows[-1] > lows[-5]
-
-    lh = highs[-1] < highs[-5]
-    ll = lows[-1] < lows[-5]
-
-    if hh and hl:
-        return "BULLISH"
-
-    if lh and ll:
-        return "BEARISH"
-
-    return "RANGE"
-
-# ============================================================
-# VOLUME SPIKE
-# ============================================================
-
-def volume_spike(df):
-
-    recent = df["volume"].tail(5).mean()
-
-    old = df["volume"].tail(30).mean()
-
-    return recent > old * 1.8
-
-# ============================================================
-# LIQUIDITY SWEEP
-# ============================================================
-
-def liquidity_sweep(df):
-
-    high_prev = df["high"].iloc[-10:-1].max()
-
-    low_prev = df["low"].iloc[-10:-1].min()
-
-    current_high = df["high"].iloc[-1]
-    current_low = df["low"].iloc[-1]
-
-    close = df["close"].iloc[-1]
-
-    bullish = current_low < low_prev and close > low_prev
-
-    bearish = current_high > high_prev and close < high_prev
-
-    return bullish, bearish
-
-# ============================================================
-# BOS
-# ============================================================
-
-def detect_bos(df):
-
-    high_prev = df["high"].iloc[-20:-5].max()
-
-    low_prev = df["low"].iloc[-20:-5].min()
-
-    close = df["close"].iloc[-1]
-
-    bullish = close > high_prev
-
-    bearish = close < low_prev
-
-    return bullish, bearish
-
-# ============================================================
-# ATR
-# ============================================================
-
-def get_atr(df):
-
-    atr = AverageTrueRange(
-        high=df["high"],
-        low=df["low"],
-        close=df["close"],
-        window=14
-    ).average_true_range()
-
-    return atr.iloc[-1]
-
-# ============================================================
-# TRIANGLE
-# ============================================================
-
-def detect_triangle(df):
-
-    highs = df["high"].tail(30).values
-    lows = df["low"].tail(30).values
-
-    high_slope = np.polyfit(range(len(highs)), highs, 1)[0]
-    low_slope = np.polyfit(range(len(lows)), lows, 1)[0]
-
-    if abs(high_slope) < 0.05 and low_slope > 0:
-        return "ВОСХОДЯЩИЙ ТРЕУГОЛЬНИК"
-
-    if high_slope < 0 and abs(low_slope) < 0.05:
-        return "НИСХОДЯЩИЙ ТРЕУГОЛЬНИК"
-
-    if high_slope < 0 and low_slope > 0:
-        return "СИММЕТРИЧНЫЙ ТРЕУГОЛЬНИК"
-
-    return None
-
-# ============================================================
-# WEDGE
-# ============================================================
-
-def detect_wedge(df):
-
-    highs = df["high"].tail(30).values
-    lows = df["low"].tail(30).values
-
-    high_slope = np.polyfit(range(len(highs)), highs, 1)[0]
-    low_slope = np.polyfit(range(len(lows)), lows, 1)[0]
-
-    if high_slope > 0 and low_slope > 0 and low_slope > high_slope:
-        return "ВОСХОДЯЩИЙ КЛИН"
-
-    if high_slope < 0 and low_slope < 0 and low_slope > high_slope:
-        return "НИСХОДЯЩИЙ КЛИН"
-
-    return None
-
-# ============================================================
-# CHANNEL
-# ============================================================
-
-def detect_channel(df):
-
-    highs = df["high"].tail(30).values
-    lows = df["low"].tail(30).values
-
-    high_slope = np.polyfit(range(len(highs)), highs, 1)[0]
-    low_slope = np.polyfit(range(len(lows)), lows, 1)[0]
-
-    if high_slope > 0 and low_slope > 0:
-        return "ВОСХОДЯЩИЙ КАНАЛ"
-
-    if high_slope < 0 and low_slope < 0:
-        return "НИСХОДЯЩИЙ КАНАЛ"
-
-    return None
-
-# ============================================================
-# PATTERN ENGINE
-# ============================================================
-
-def detect_pattern(df):
-
-    funcs = [
-        detect_triangle,
-        detect_wedge,
-        detect_channel
-    ]
-
-    for func in funcs:
-
-        pattern = func(df)
-
-        if pattern:
-            return pattern
-
-    return None
-
-# ============================================================
-# AI ANALYSIS
-# ============================================================
-
-def ai_analysis(df):
-
-    score = 0
-
-    structure = detect_market_structure(df)
-
-    if structure == "BULLISH":
-        score += 25
-
-    if structure == "BEARISH":
-        score += 25
-
-    vol = volume_spike(df)
-
-    if vol:
-        score += 20
-
-    sweep_bull, sweep_bear = liquidity_sweep(df)
-
-    if sweep_bull or sweep_bear:
-        score += 25
-
-    bos_bull, bos_bear = detect_bos(df)
-
-    if bos_bull or bos_bear:
-        score += 25
-
-    return score
-
-# ============================================================
-# SIGNAL ENGINE
-# ============================================================
-
-def build_signal(symbol, df_5m, df_15m, df_1h):
-
-    structures = []
-
-    patterns = []
-
-    for tf_name, df in [
-        ("5M", df_5m),
-        ("15M", df_15m),
-        ("1H", df_1h)
-    ]:
-
-        structure = detect_market_structure(df)
-
-        structures.append(structure)
-
-        pattern = detect_pattern(df)
-
-        if pattern:
-
-            patterns.append((pattern, tf_name))
-
-    bullish = structures.count("BULLISH")
-
-    bearish = structures.count("BEARISH")
-
-    score = 0
-
-    score += bullish * 20
-
-    ai_5m = ai_analysis(df_5m)
-    ai_15m = ai_analysis(df_15m)
-    ai_1h = ai_analysis(df_1h)
-
-    score += (ai_5m + ai_15m + ai_1h) / 3
-
-    current_price = df_15m["close"].iloc[-1]
-
-    atr = get_atr(df_15m)
-
-    direction = None
-
-    if bullish >= 2:
-        direction = "LONG"
-
-    if bearish >= 2:
-        direction = "SHORT"
-
-    if not direction:
-        return None
-
-    if score < 85:
-        return None
-
-    if direction == "LONG":
-
-        entry = current_price
-        stop = current_price - atr
-        tp1 = current_price + atr * 2
-        tp2 = current_price + atr * 3
-
-    else:
-
-        entry = current_price
-        stop = current_price + atr
-        tp1 = current_price - atr * 2
-        tp2 = current_price - atr * 3
-
-    return {
-        "symbol": symbol,
-        "direction": direction,
-        "score": round(score, 1),
-        "entry": round(entry, 6),
-        "stop": round(stop, 6),
-        "tp1": round(tp1, 6),
-        "tp2": round(tp2, 6),
-        "bullish": bullish,
-        "bearish": bearish,
-        "patterns": patterns
+    tf_map = {
+        "5m": "5m",
+        "15m": "15m",
+        "1H": "1H"
     }
 
-# ============================================================
-# SEND PATTERN ALERT
-# ============================================================
+    url = f"https://www.okx.com/api/v5/market/candles?instId={symbol}&bar={tf_map[timeframe]}&limit={limit}"
 
-def send_pattern_alert(symbol, pattern, tf):
+    r = requests.get(url).json()
 
-    message = f"""
-👀 <b>ФОРМИРУЕТСЯ ФИГУРА</b>
+    data = r["data"]
 
-🪙 <b>Монета:</b> {symbol}
+    df = pd.DataFrame(data)
 
-📐 <b>Паттерн:</b>
-• {pattern}
+    df = df.iloc[:, :6]
 
-⏰ <b>Таймфрейм:</b>
-• {tf}
+    df.columns = ["ts", "open", "high", "low", "close", "volume"]
 
-⚠️ <b>Статус:</b>
-Фигура требует подтверждения
+    df = df.astype(float)
 
-📊 Наблюдай за реакцией цены
+    df = df[::-1].reset_index(drop=True)
+
+    return df
+
+# =========================================================
+# INDICATORS
+# =========================================================
+
+def indicators(df):
+
+    df["ema20"] = df["close"].ewm(span=20).mean()
+    df["ema50"] = df["close"].ewm(span=50).mean()
+
+    delta = df["close"].diff()
+
+    gain = np.where(delta > 0, delta, 0)
+    loss = np.where(delta < 0, abs(delta), 0)
+
+    avg_gain = pd.Series(gain).rolling(14).mean()
+    avg_loss = pd.Series(loss).rolling(14).mean()
+
+    rs = avg_gain / avg_loss
+
+    df["rsi"] = 100 - (100 / (1 + rs))
+
+    return df
+
+# =========================================================
+# FIGURES
+# =========================================================
+
+def detect_patterns(df):
+
+    closes = df["close"].values[-30:]
+    highs = df["high"].values[-30:]
+    lows = df["low"].values[-30:]
+
+    pattern = None
+    direction = None
+    strength = 0
+
+    # ASCENDING TRIANGLE
+
+    if highs[-1] > highs[-5] and lows[-1] > lows[-5]:
+
+        pattern = "ВОСХОДЯЩИЙ ТРЕУГОЛЬНИК"
+        direction = "LONG"
+        strength = 88
+
+    # DESCENDING TRIANGLE
+
+    elif highs[-1] < highs[-5] and lows[-1] < lows[-5]:
+
+        pattern = "НИСХОДЯЩИЙ ТРЕУГОЛЬНИК"
+        direction = "SHORT"
+        strength = 88
+
+    # WEDGE
+
+    spread_now = highs[-1] - lows[-1]
+    spread_old = highs[-10] - lows[-10]
+
+    if spread_now < spread_old * 0.7:
+
+        pattern = "КЛИН"
+        strength += 5
+
+    # CHANNEL
+
+    slope_high = highs[-1] - highs[-10]
+    slope_low = lows[-1] - lows[-10]
+
+    if slope_high > 0 and slope_low > 0:
+
+        pattern = "ВОСХОДЯЩИЙ КАНАЛ"
+        direction = "LONG"
+        strength += 8
+
+    if slope_high < 0 and slope_low < 0:
+
+        pattern = "НИСХОДЯЩИЙ КАНАЛ"
+        direction = "SHORT"
+        strength += 8
+
+    return {
+        "pattern": pattern,
+        "direction": direction,
+        "strength": strength
+    }
+
+# =========================================================
+# ANALYSIS
+# =========================================================
+
+def analyze_symbol(symbol):
+
+    bullish = 0
+    bearish = 0
+
+    total_score = 0
+
+    detected_patterns = []
+
+    last_price = None
+
+    for tf in TIMEFRAMES:
+
+        print("TF:", tf)
+
+        df = get_okx_data(symbol, tf)
+
+        df = indicators(df)
+
+        pattern_data = detect_patterns(df)
+
+        pattern = pattern_data["pattern"]
+
+        if pattern:
+
+            detected_patterns.append(f"{pattern} ({tf})")
+
+        close = df["close"].iloc[-1]
+
+        ema20 = df["ema20"].iloc[-1]
+        ema50 = df["ema50"].iloc[-1]
+
+        rsi = df["rsi"].iloc[-1]
+
+        last_price = close
+
+        score = 0
+
+        # PRICE ACTION
+
+        if close > ema20 > ema50:
+            bullish += 1
+            score += 20
+
+        if close < ema20 < ema50:
+            bearish += 1
+            score += 20
+
+        # RSI
+
+        if 45 < rsi < 65:
+            score += 15
+
+        # VOLUME IMPULSE
+
+        vol_now = df["volume"].iloc[-1]
+        vol_avg = df["volume"].rolling(20).mean().iloc[-1]
+
+        if vol_now > vol_avg * 1.8:
+            score += 25
+
+        # BREAKOUT
+
+        recent_high = df["high"].rolling(20).max().iloc[-2]
+
+        if close > recent_high:
+            score += 30
+
+        # PATTERN
+
+        score += pattern_data["strength"]
+
+        total_score += score
+
+    avg_score = total_score / 3
+
+    # =====================================================
+    # FIGURE ALERTS
+    # =====================================================
+
+    for p in detected_patterns:
+
+        alert_id = f"{symbol}_{p}"
+
+        if alert_id not in sent_alerts:
+
+            text = f"""
+📐 <b>ФОРМИРУЕТСЯ ФИГУРА</b>
+
+💰 Монета: <b>{symbol}</b>
+
+📊 Фигура:
+<b>{p}</b>
+
+👀 Проверь график вручную
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
 """
 
-    send_telegram(message)
+            send_telegram(text)
 
-# ============================================================
-# SEND ELITE SIGNAL
-# ============================================================
+            sent_alerts.add(alert_id)
 
-def send_elite_signal(signal):
+    # =====================================================
+    # ELITE SIGNALS
+    # =====================================================
 
-    pattern_text = ""
+    if avg_score >= 90:
 
-    if signal["patterns"]:
+        signal = "LONG" if bullish > bearish else "SHORT"
 
-        for p in signal["patterns"]:
+        entry = last_price
 
-            pattern_text += f"• {p[0]} ({p[1]})\n"
+        if signal == "LONG":
+
+            sl = round(entry * 0.995, 6)
+            tp = round(entry * 1.015, 6)
+
+        else:
+
+            sl = round(entry * 1.005, 6)
+            tp = round(entry * 0.985, 6)
+
+        rr = 3
+
+        alert_id = f"{symbol}_{signal}_{round(entry,4)}"
+
+        if alert_id in sent_alerts:
+            return
+
+        text = f"""
+🚨 <b>ULTRA ELITE SIGNAL</b>
+
+💰 Монета: <b>{symbol}</b>
+
+📈 Направление:
+<b>{signal}</b>
+
+🧠 AI Score:
+<b>{round(avg_score,1)}</b>
+
+📊 Бычьих TF:
+<b>{bullish}</b>
+
+📉 Медвежьих TF:
+<b>{bearish}</b>
+
+📐 Фигуры:
+<b>{', '.join(detected_patterns) if detected_patterns else 'нет'}</b>
+
+🎯 Entry:
+<code>{entry}</code>
+
+🛑 Stop Loss:
+<code>{sl}</code>
+
+🚀 Take Profit:
+<code>{tp}</code>
+
+⚖ Risk/Reward:
+<b>{rr}</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+
+        send_telegram(text)
+
+        print("✅ ELITE SIGNAL:", symbol)
+
+        sent_alerts.add(alert_id)
 
     else:
 
-        pattern_text = "• Smart Money Setup\n"
+        print("❌ NO ELITE SETUP")
 
-    direction_ru = "LONG 📈" if signal["direction"] == "LONG" else "SHORT 📉"
-
-    message = f"""
-🚨 <b>ULTRA ELITE СИГНАЛ</b>
-
-🪙 <b>Монета:</b> {signal["symbol"]}
-
-📈 <b>Направление:</b>
-{direction_ru}
-
-🧠 <b>AI Вероятность:</b>
-{signal["score"]}%
-
-📐 <b>Фигуры / Структуры:</b>
-{pattern_text}
-
-📊 <b>Подтверждение:</b>
-• Бычьих TF: {signal["bullish"]}
-• Медвежьих TF: {signal["bearish"]}
-
-🏦 <b>Smart Money:</b>
-✅ Liquidity Sweep
-✅ BOS Confirmation
-✅ Volume Expansion
-
-💰 <b>Вход:</b>
-{signal["entry"]}
-
-🛑 <b>Стоп:</b>
-{signal["stop"]}
-
-🎯 <b>TP1:</b>
-{signal["tp1"]}
-
-🎯 <b>TP2:</b>
-{signal["tp2"]}
-
-⚡ <b>Risk/Reward:</b>
-1:3
-"""
-
-    send_telegram(message)
-
-# ============================================================
+# =========================================================
 # MAIN LOOP
-# ============================================================
-
-sent_patterns = set()
-
-print("================================================")
-print("🔥 ULTRA INSTITUTIONAL AI SCANNER STARTED")
-print("================================================")
+# =========================================================
 
 while True:
 
     try:
 
-        symbols = get_top_okx_symbols(100)
+        print("\n================================================")
+        print("🔥 ULTRA AI SCANNER START")
+        print("================================================\n")
 
-        signals_found = 0
+        pairs = get_top_pairs()
 
-        for symbol in symbols:
+        for symbol in pairs:
 
-            print(f"\nSCAN: {symbol}")
+            print("\nSCAN:", symbol)
 
-            df_5m = get_okx_data(symbol, "5m")
-            df_15m = get_okx_data(symbol, "15m")
-            df_1h = get_okx_data(symbol, "1H")
-
-            if (
-                df_5m is None or
-                df_15m is None or
-                df_1h is None
-            ):
-                continue
-
-            for tf_name, df in [
-                ("5M", df_5m),
-                ("15M", df_15m),
-                ("1H", df_1h)
-            ]:
-
-                pattern = detect_pattern(df)
-
-                if pattern:
-
-                    pattern_key = f"{symbol}_{pattern}_{tf_name}"
-
-                    if pattern_key not in sent_patterns:
-
-                        send_pattern_alert(
-                            symbol,
-                            pattern,
-                            tf_name
-                        )
-
-                        sent_patterns.add(pattern_key)
-
-            signal = build_signal(
-                symbol,
-                df_5m,
-                df_15m,
-                df_1h
-            )
-
-            if signal:
-
-                send_elite_signal(signal)
-
-                signals_found += 1
-
-                print("✅ ELITE SIGNAL")
-
-            else:
-
-                print("❌ NO ELITE SETUP")
+            analyze_symbol(symbol)
 
         print("\n================================================")
         print("✅ SCAN COMPLETE")
-        print(f"SIGNALS FOUND: {signals_found}")
         print("================================================")
+
+        print(f"😴 WAIT {SCAN_INTERVAL/60} MINUTES")
 
         time.sleep(SCAN_INTERVAL)
 
     except Exception as e:
 
-        print("MAIN LOOP ERROR:", e)
+        print("MAIN ERROR:", e)
 
         time.sleep(30)
-
-
