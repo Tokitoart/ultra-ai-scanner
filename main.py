@@ -9,8 +9,8 @@ from datetime import datetime
 # CONFIG
 # =========================================================
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_TOKEN = os.getenv("8723271611:AAFYDVvzWn3_iWp60fwYwBDiDAYfTLgLIq0")
+TELEGRAM_CHAT_ID = os.getenv("315991729")
 
 SCAN_INTERVAL = 180
 MAX_ACTIVE_TRADES = 2
