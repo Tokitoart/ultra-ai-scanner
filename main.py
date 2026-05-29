@@ -1,233 +1,151 @@
+import os
+import time
 import requests
 import pandas as pd
 import numpy as np
-import time
 from datetime import datetime
 
-# ============================================================
+# =========================================================
+# CONFIG
+# =========================================================
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+SCAN_INTERVAL = 180
+MAX_ACTIVE_TRADES = 2
+
+RISK_PER_TRADE = 0.01
+MIN_AI_SCORE = 88
+
+TOP_SYMBOLS_LIMIT = 100
+
+active_trades = {}
+cooldown_symbols = {}
+
+# =========================================================
 # TELEGRAM
-# ============================================================
-
-BOT_TOKEN = "8723271611:AAFYDVvzWn3_iWp60fwYwBDiDAYfTLgLIq0"
-CHAT_ID = "315991729"
-
-# ============================================================
-# SETTINGS
-# ============================================================
-
-SCAN_INTERVAL = 300
-
-MIN_VOLUME_24H = 5_000_000
-
-ELITE_SCORE = 115
-
-MAX_SIGNALS_PER_SCAN = 2
-MAX_PATTERNS_PER_SCAN = 4
-
-SIGNAL_COOLDOWN = 1800
-PATTERN_COOLDOWN = 7200
-
-TIMEFRAMES = [
-    ("5m", "5m"),
-    ("15m", "15m"),
-    ("1H", "1H")
-]
-
-# ============================================================
-# MEMORY
-# ============================================================
-
-LAST_SIGNAL_TIME = {}
-LAST_PATTERN_TIME = {}
-
-# ============================================================
-# TELEGRAM
-# ============================================================
+# =========================================================
 
 def send_telegram(text):
 
-    try:
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram not configured")
+        return
 
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
-        payload = {
-            "chat_id": CHAT_ID,
-            "text": text,
-            "parse_mode": "HTML"
-        }
-
-        requests.post(url, data=payload, timeout=10)
-
-    except Exception as e:
-        print("TELEGRAM ERROR:", e)
-
-# ============================================================
-# GET TOP COINS
-# ============================================================
-
-def get_top_100_okx_pairs():
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML"
+    }
 
     try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print("Telegram Error:", e)
 
-        url = "https://www.okx.com/api/v5/market/tickers?instType=SWAP"
+# =========================================================
+# GET TOP 100 COINS
+# =========================================================
 
-        data = requests.get(url).json()["data"]
+def get_top_symbols():
 
-        pairs = []
+    try:
 
-        for x in data:
+        url = "https://api.bybit.com/v5/market/tickers?category=linear"
 
-            try:
+        data = requests.get(url).json()
 
-                symbol = x["instId"]
+        tickers = data["result"]["list"]
 
-                if "USDT-SWAP" not in symbol:
-                    continue
+        filtered = []
 
-                vol = float(x["volCcy24h"])
+        for t in tickers:
 
-                if vol < MIN_VOLUME_24H:
-                    continue
+            symbol = t["symbol"]
 
-                pairs.append((symbol, vol))
+            if "USDT" not in symbol:
+                continue
 
-            except:
-                pass
+            volume = float(t.get("turnover24h", 0))
 
-        pairs = sorted(pairs, key=lambda x: x[1], reverse=True)
+            filtered.append((symbol, volume))
 
-        return [x[0] for x in pairs[:100]]
+        filtered = sorted(filtered, key=lambda x: x[1], reverse=True)
+
+        return [x[0] for x in filtered[:TOP_SYMBOLS_LIMIT]]
 
     except Exception as e:
-
-        print("TOP COINS ERROR:", e)
-
+        print("Top symbols error:", e)
         return []
 
-# ============================================================
-# GET CANDLES
-# ============================================================
+# =========================================================
+# GET KLINES
+# =========================================================
 
-def get_candles(symbol, tf="15m", limit=200):
+def get_klines(symbol, interval, limit=200):
 
-    try:
+    url = (
+        f"https://api.bybit.com/v5/market/kline?"
+        f"category=linear&symbol={symbol}"
+        f"&interval={interval}&limit={limit}"
+    )
 
-        url = f"https://www.okx.com/api/v5/market/candles?instId={symbol}&bar={tf}&limit={limit}"
+    data = requests.get(url).json()
 
-        data = requests.get(url).json()["data"]
+    rows = data["result"]["list"]
 
-        df = pd.DataFrame(data)
+    rows.reverse()
 
-        df = df.iloc[:, :6]
+    df = pd.DataFrame(rows)
 
-        df.columns = [
-            "ts",
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume"
-        ]
+    df.columns = [
+        "time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "turnover"
+    ]
 
-        for col in ["open","high","low","close","volume"]:
-            df[col] = df[col].astype(float)
+    for col in ["open", "high", "low", "close", "volume"]:
+        df[col] = df[col].astype(float)
 
-        df = df[::-1].reset_index(drop=True)
+    return df
 
-        return df
+# =========================================================
+# INDICATORS
+# =========================================================
 
-    except:
-        return None
+def add_indicators(df):
 
-# ============================================================
-# MARKET STRUCTURE
-# ============================================================
+    df["ema20"] = df["close"].ewm(span=20).mean()
+    df["ema50"] = df["close"].ewm(span=50).mean()
 
-def market_structure(df):
+    delta = df["close"].diff()
 
-    highs = df["high"].values
-    lows = df["low"].values
+    gain = np.where(delta > 0, delta, 0)
+    loss = np.where(delta < 0, abs(delta), 0)
 
-    bullish = 0
-    bearish = 0
+    avg_gain = pd.Series(gain).rolling(14).mean()
+    avg_loss = pd.Series(loss).rolling(14).mean()
 
-    if highs[-1] > highs[-5]:
-        bullish += 1
-    else:
-        bearish += 1
+    rs = avg_gain / avg_loss
 
-    if lows[-1] > lows[-5]:
-        bullish += 1
-    else:
-        bearish += 1
+    df["rsi"] = 100 - (100 / (1 + rs))
 
-    return bullish, bearish
+    df["atr"] = (
+        df["high"] - df["low"]
+    ).rolling(14).mean()
 
-# ============================================================
-# VOLUME PRESSURE
-# ============================================================
+    return df
 
-def volume_pressure(df):
-
-    recent = df["volume"].tail(10).mean()
-
-    old = df["volume"].tail(50).mean()
-
-    ratio = recent / old
-
-    if ratio > 1.5:
-        return "HIGH"
-
-    elif ratio > 1.1:
-        return "NORMAL"
-
-    else:
-        return "LOW"
-
-# ============================================================
-# LIQUIDITY SWEEP
-# ============================================================
-
-def liquidity_sweep(df):
-
-    high_break = df["high"].iloc[-1] > df["high"].iloc[-5:-1].max()
-
-    low_break = df["low"].iloc[-1] < df["low"].iloc[-5:-1].min()
-
-    if high_break:
-        return "BUY SIDE"
-
-    if low_break:
-        return "SELL SIDE"
-
-    return "NONE"
-
-# ============================================================
-# VOLATILITY
-# ============================================================
-
-def volatility(df):
-
-    return (df["high"] - df["low"]).rolling(20).mean().iloc[-1]
-
-# ============================================================
-# COMPRESSION
-# ============================================================
-
-def compression(df):
-
-    recent = volatility(df)
-
-    old = (df["high"] - df["low"]).rolling(50).mean().iloc[-1]
-
-    if recent < old * 0.7:
-        return "HIGH"
-
-    return "NORMAL"
-
-# ============================================================
-# PATTERN DETECTION
-# ============================================================
+# =========================================================
+# PATTERNS
+# =========================================================
 
 def detect_pattern(df):
 
@@ -237,322 +155,329 @@ def detect_pattern(df):
     high_slope = np.polyfit(range(len(highs)), highs, 1)[0]
     low_slope = np.polyfit(range(len(lows)), lows, 1)[0]
 
-    # ASCENDING CHANNEL
     if high_slope > 0 and low_slope > 0:
-        return "ВОСХОДЯЩИЙ КАНАЛ", 7
+        return "ВОСХОДЯЩИЙ КАНАЛ"
 
-    # DESCENDING CHANNEL
     if high_slope < 0 and low_slope < 0:
-        return "НИСХОДЯЩИЙ КАНАЛ", 7
+        return "НИСХОДЯЩИЙ КАНАЛ"
 
-    # TRIANGLE
     if high_slope < 0 and low_slope > 0:
-        return "СИММЕТРИЧНЫЙ ТРЕУГОЛЬНИК", 9
+        return "СИММЕТРИЧНЫЙ ТРЕУГОЛЬНИК"
 
-    # FALLING WEDGE
-    if high_slope < 0 and low_slope < 0 and abs(low_slope) < abs(high_slope):
-        return "ПАДАЮЩИЙ КЛИН", 9
+    return None
 
-    # RISING WEDGE
-    if high_slope > 0 and low_slope > 0 and abs(low_slope) > abs(high_slope):
-        return "РАСТУЩИЙ КЛИН", 9
+# =========================================================
+# AI SCORE
+# =========================================================
 
-    return None, 0
+def calculate_score(df5, df15, df1h):
 
-# ============================================================
-# AI ANALYSIS
-# ============================================================
+    score = 0
 
-def analyze_symbol(symbol):
+    bullish = 0
+    bearish = 0
 
-    bullish_tf = 0
-    bearish_tf = 0
+    frames = [df5, df15, df1h]
 
-    patterns = []
+    for df in frames:
 
-    total_score = 0
+        last = df.iloc[-1]
 
-    best_tf = None
+        if last["ema20"] > last["ema50"]:
+            score += 15
+            bullish += 1
+        else:
+            score -= 10
+            bearish += 1
 
-    pattern_strength = 0
+        if last["rsi"] > 55:
+            score += 10
 
-    compression_state = "NORMAL"
+        if last["rsi"] < 45:
+            score += 10
 
-    liquidity = "NONE"
+    volatility = df15["atr"].iloc[-1]
 
-    volume_state = "LOW"
+    if volatility > df15["close"].iloc[-1] * 0.003:
+        score += 15
 
-    entry = None
+    pattern = detect_pattern(df15)
 
-    sl = None
+    if pattern:
+        score += 20
 
-    tp = None
+    return score, bullish, bearish, pattern
 
-    side = None
+# =========================================================
+# ENTRY LOGIC
+# =========================================================
 
-    for tf_name, tf in TIMEFRAMES:
+def find_trade(symbol):
 
-        print(f"TF: {tf}")
+    try:
 
-        df = get_candles(symbol, tf)
+        df5 = add_indicators(get_klines(symbol, "5"))
+        df15 = add_indicators(get_klines(symbol, "15"))
+        df1h = add_indicators(get_klines(symbol, "60"))
 
-        if df is None:
-            continue
+        score, bullish, bearish, pattern = calculate_score(
+            df5,
+            df15,
+            df1h
+        )
 
-        bull, bear = market_structure(df)
+        if score < MIN_AI_SCORE:
+            return None
 
-        bullish_tf += bull
-        bearish_tf += bear
+        direction = None
 
-        pattern, strength = detect_pattern(df)
+        if bullish >= 2:
+            direction = "LONG"
 
-        if pattern:
-            patterns.append(f"{pattern} ({tf})")
+        if bearish >= 2:
+            direction = "SHORT"
 
-        volume_state = volume_pressure(df)
+        if not direction:
+            return None
 
-        liquidity = liquidity_sweep(df)
+        last = df15.iloc[-1]
 
-        compression_state = compression(df)
+        entry = last["close"]
 
-        if strength > pattern_strength:
-            pattern_strength = strength
-            best_tf = tf
+        atr = last["atr"]
 
-        total_score += strength
+        if direction == "LONG":
 
-        price = df["close"].iloc[-1]
-
-        atr = (df["high"] - df["low"]).rolling(14).mean().iloc[-1]
-
-        if bull > bear:
-
-            side = "LONG"
-
-            entry = round(price, 6)
-
-            sl = round(price - atr * 1.5, 6)
-
-            tp = round(price + atr * 4.5, 6)
+            sl = entry - atr * 1.2
+            tp = entry + atr * 2.5
 
         else:
 
-            side = "SHORT"
+            sl = entry + atr * 1.2
+            tp = entry - atr * 2.5
 
-            entry = round(price, 6)
+        return {
+            "symbol": symbol,
+            "direction": direction,
+            "score": round(score, 1),
+            "entry": round(entry, 6),
+            "sl": round(sl, 6),
+            "tp": round(tp, 6),
+            "pattern": pattern,
+            "bullish": bullish,
+            "bearish": bearish
+        }
 
-            sl = round(price + atr * 1.5, 6)
+    except Exception as e:
+        print(symbol, e)
+        return None
 
-            tp = round(price - atr * 4.5, 6)
+# =========================================================
+# TELEGRAM MESSAGE
+# =========================================================
 
-    rr = 3
+def send_signal(trade):
 
-    score = total_score
+    emoji = "🟢" if trade["direction"] == "LONG" else "🔴"
 
-    if bullish_tf >= 5:
-        score += 20
+    text = f"""
+🚨 <b>ULTRA AI SIGNAL</b>
 
-    if bearish_tf >= 5:
-        score += 20
+💰 <b>Монета:</b>
+{trade['symbol']}
 
-    if volume_state == "HIGH":
-        score += 15
+{emoji} <b>Направление:</b>
+{trade['direction']}
 
-    if compression_state == "HIGH":
-        score += 15
+🧠 <b>AI Score:</b>
+{trade['score']}
 
-    if liquidity != "NONE":
-        score += 15
+📊 <b>Бычьих TF:</b>
+{trade['bullish']}
 
-    elite = score >= ELITE_SCORE
+📉 <b>Медвежьих TF:</b>
+{trade['bearish']}
 
-    pattern_only = (
-        pattern_strength >= 8
-        and not elite
-    )
+📐 <b>Фигура:</b>
+{trade['pattern']}
 
-    probability = min(round(score), 99)
+🎯 <b>Entry:</b>
+{trade['entry']}
 
-    return {
-        "elite": elite,
-        "pattern_only": pattern_only,
-        "score": score,
-        "side": side,
-        "entry": entry,
-        "sl": sl,
-        "tp": tp,
-        "rr": rr,
-        "bullish_tf": bullish_tf,
-        "bearish_tf": bearish_tf,
-        "pattern": ", ".join(patterns),
-        "pattern_strength": pattern_strength,
-        "tf_pattern": best_tf,
-        "compression": compression_state,
-        "liquidity": liquidity,
-        "volume_state": volume_state,
-        "probability": probability
-    }
+🛑 <b>Stop Loss:</b>
+{trade['sl']}
 
-# ============================================================
+🚀 <b>Take Profit:</b>
+{trade['tp']}
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+
+    send_telegram(text)
+
+# =========================================================
+# POSITION MANAGEMENT
+# =========================================================
+
+def monitor_trade(trade):
+
+    symbol = trade["symbol"]
+
+    try:
+
+        df = get_klines(symbol, "1", 50)
+
+        price = df["close"].iloc[-1]
+
+        pnl = 0
+
+        if trade["direction"] == "LONG":
+
+            pnl = ((price - trade["entry"]) / trade["entry"]) * 100
+
+            if price >= trade["tp"]:
+                close_trade(trade, pnl, "TAKE PROFIT")
+                return True
+
+            if price <= trade["sl"]:
+                close_trade(trade, pnl, "STOP LOSS")
+                return True
+
+            if pnl > 0.5:
+                trade["sl"] = trade["entry"]
+
+        else:
+
+            pnl = ((trade["entry"] - price) / trade["entry"]) * 100
+
+            if price <= trade["tp"]:
+                close_trade(trade, pnl, "TAKE PROFIT")
+                return True
+
+            if price >= trade["sl"]:
+                close_trade(trade, pnl, "STOP LOSS")
+                return True
+
+            if pnl > 0.5:
+                trade["sl"] = trade["entry"]
+
+        return False
+
+    except Exception as e:
+        print("Monitor error:", e)
+        return False
+
+# =========================================================
+# CLOSE TRADE
+# =========================================================
+
+def close_trade(trade, pnl, reason):
+
+    text = f"""
+🏁 <b>СДЕЛКА ЗАКРЫТА</b>
+
+💰 <b>Монета:</b>
+{trade['symbol']}
+
+📈 <b>Направление:</b>
+{trade['direction']}
+
+📊 <b>Результат:</b>
+{round(pnl, 2)}%
+
+📌 <b>Причина:</b>
+{reason}
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+
+    send_telegram(text)
+
+    cooldown_symbols[trade["symbol"]] = time.time()
+
+# =========================================================
 # MAIN LOOP
-# ============================================================
+# =========================================================
+
+print("================================================")
+print("🔥 ULTRA AI SCANNER START")
+print("================================================")
 
 while True:
 
     try:
 
-        print("\n" + "="*60)
-        print("🔥 ULTRA SMART AI SCANNER")
-        print("="*60)
+        # =============================================
+        # MONITOR OPEN TRADES
+        # =============================================
 
-        signals_sent = 0
-        patterns_sent = 0
+        remove_list = []
 
-        pairs = get_top_100_okx_pairs()
+        for symbol, trade in active_trades.items():
 
-        print(f"COINS: {len(pairs)}")
+            closed = monitor_trade(trade)
 
-        for symbol in pairs:
+            if closed:
+                remove_list.append(symbol)
 
-            try:
+        for r in remove_list:
+            del active_trades[r]
 
-                print(f"\nSCAN: {symbol}")
+        # =============================================
+        # SEARCH NEW TRADES
+        # =============================================
 
-                signal = analyze_symbol(symbol)
+        if len(active_trades) < MAX_ACTIVE_TRADES:
 
-                now = time.time()
+            symbols = get_top_symbols()
 
-                # ===================================================
-                # ELITE SIGNAL
-                # ===================================================
+            best_trade = None
 
-                if signal["elite"]:
+            for symbol in symbols:
 
-                    if signals_sent >= MAX_SIGNALS_PER_SCAN:
+                print(f"SCAN: {symbol}")
+
+                if symbol in active_trades:
+                    continue
+
+                if symbol in cooldown_symbols:
+
+                    cd = cooldown_symbols[symbol]
+
+                    if time.time() - cd < 3600:
                         continue
 
-                    last = LAST_SIGNAL_TIME.get(symbol, 0)
+                trade = find_trade(symbol)
 
-                    if now - last < SIGNAL_COOLDOWN:
-                        continue
+                if not trade:
+                    continue
 
-                    LAST_SIGNAL_TIME[symbol] = now
+                if best_trade is None:
+                    best_trade = trade
 
-                    send_telegram(
-f"""
-🚨 <b>ULTRA ELITE SIGNAL</b>
+                elif trade["score"] > best_trade["score"]:
+                    best_trade = trade
 
-💰 <b>Монета:</b>
-{symbol}
+            if best_trade:
 
-📈 <b>Направление:</b>
-{signal['side']}
+                active_trades[best_trade["symbol"]] = best_trade
 
-🧠 <b>AI Score:</b>
-{round(signal['score'],1)}
+                send_signal(best_trade)
 
-📊 <b>Бычьих TF:</b>
-{signal['bullish_tf']}
+                print("✅ NEW TRADE:", best_trade["symbol"])
 
-📉 <b>Медвежьих TF:</b>
-{signal['bearish_tf']}
+            else:
 
-📐 <b>Фигуры:</b>
-{signal['pattern']}
+                print("❌ NO ELITE SETUPS")
 
-🎯 <b>Entry:</b>
-{signal['entry']}
-
-🛑 <b>Stop Loss:</b>
-{signal['sl']}
-
-🚀 <b>Take Profit:</b>
-{signal['tp']}
-
-⚖ <b>RR:</b>
-{signal['rr']}
-
-🔥 <b>Вероятность:</b>
-{signal['probability']}%
-
-💧 <b>Liquidity Sweep:</b>
-{signal['liquidity']}
-
-📦 <b>Volume Pressure:</b>
-{signal['volume_state']}
-
-⚡ <b>Compression:</b>
-{signal['compression']}
-
-⏰ {datetime.now().strftime('%H:%M:%S')}
-"""
-                    )
-
-                    print("✅ ELITE SIGNAL SENT")
-
-                    signals_sent += 1
-
-                # ===================================================
-                # PATTERN ALERT
-                # ===================================================
-
-                elif signal["pattern_only"]:
-
-                    if patterns_sent >= MAX_PATTERNS_PER_SCAN:
-                        continue
-
-                    last = LAST_PATTERN_TIME.get(symbol, 0)
-
-                    if now - last < PATTERN_COOLDOWN:
-                        continue
-
-                    LAST_PATTERN_TIME[symbol] = now
-
-                    send_telegram(
-f"""
-📐 <b>ФОРМИРУЕТСЯ ФИГУРА</b>
-
-💰 <b>Монета:</b>
-{symbol}
-
-📊 <b>Фигура:</b>
-{signal['pattern']}
-
-⏰ <b>Таймфрейм:</b>
-{signal['tf_pattern']}
-
-🔥 <b>Сила фигуры:</b>
-{signal['pattern_strength']}/10
-
-⚡ <b>Compression:</b>
-{signal['compression']}
-
-👀 Проверь график вручную
-
-⏰ {datetime.now().strftime('%H:%M:%S')}
-"""
-                    )
-
-                    print("📐 PATTERN ALERT SENT")
-
-                    patterns_sent += 1
-
-            except Exception as e:
-
-                print(symbol, e)
-
-        print("\n" + "="*60)
-        print("✅ SCAN COMPLETE")
-        print(f"🚨 SIGNALS SENT: {signals_sent}")
-        print(f"📐 PATTERNS SENT: {patterns_sent}")
-        print("="*60)
-
-        print(f"😴 WAIT {SCAN_INTERVAL/60} MINUTES")
+        print("================================================")
+        print(f"ACTIVE TRADES: {len(active_trades)}")
+        print("================================================")
 
         time.sleep(SCAN_INTERVAL)
 
     except Exception as e:
 
-        print("MAIN LOOP ERROR:", e)
+        print("MAIN ERROR:", e)
 
-        time.sleep(60)
+        time.sleep(30)
