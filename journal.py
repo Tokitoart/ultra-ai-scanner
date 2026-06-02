@@ -2,7 +2,10 @@ import csv
 import os
 from datetime import datetime
 
-from config import JOURNAL_FILE
+from config import (
+    JOURNAL_FILE,
+    START_BALANCE
+)
 
 # ==========================================
 # CREATE FILE
@@ -13,7 +16,11 @@ def create_journal():
     if os.path.exists(JOURNAL_FILE):
         return
 
-    with open(JOURNAL_FILE, "w", newline="") as f:
+    with open(
+        JOURNAL_FILE,
+        "w",
+        newline=""
+    ) as f:
 
         writer = csv.writer(f)
 
@@ -42,12 +49,18 @@ def save_trade(
 
     create_journal()
 
-    with open(JOURNAL_FILE, "a", newline="") as f:
+    with open(
+        JOURNAL_FILE,
+        "a",
+        newline=""
+    ) as f:
 
         writer = csv.writer(f)
 
         writer.writerow([
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
             symbol,
             direction,
             entry,
@@ -66,12 +79,14 @@ def get_stats():
 
     wins = 0
     losses = 0
+    trades = 0
 
     total_pnl = 0
 
-    trades = 0
-
-    with open(JOURNAL_FILE, "r") as f:
+    with open(
+        JOURNAL_FILE,
+        "r"
+    ) as f:
 
         reader = csv.DictReader(f)
 
@@ -79,33 +94,55 @@ def get_stats():
 
             trades += 1
 
-            pnl = float(row["pnl"])
+            pnl = float(
+                row["pnl"]
+            )
 
             total_pnl += pnl
 
             if pnl >= 0:
+
                 wins += 1
+
             else:
+
                 losses += 1
 
     winrate = 0
 
     if trades > 0:
+
         winrate = round(
             wins / trades * 100,
             2
         )
 
+    balance = round(
+        START_BALANCE
+        * (1 + total_pnl / 100),
+        2
+    )
+
     return {
+
+        "balance": balance,
+
         "wins": wins,
+
         "losses": losses,
+
         "total_trades": trades,
+
         "winrate": winrate,
-        "total_pnl": round(total_pnl, 2)
+
+        "total_pnl": round(
+            total_pnl,
+            2
+        )
     }
 
 # ==========================================
-# PRINT JOURNAL
+# PRINT STATS
 # ==========================================
 
 def print_stats():
@@ -113,13 +150,39 @@ def print_stats():
     stats = get_stats()
 
     print("\n==========================")
-    print("TRADING STATS")
+    print("📊 TRADING STATS")
     print("==========================")
 
-    print("Trades:", stats["total_trades"])
-    print("Wins:", stats["wins"])
-    print("Losses:", stats["losses"])
-    print("Winrate:", stats["winrate"], "%")
-    print("Total PnL:", stats["total_pnl"], "%")
+    print(
+        "Balance:",
+        stats["balance"]
+    )
+
+    print(
+        "Trades:",
+        stats["total_trades"]
+    )
+
+    print(
+        "Wins:",
+        stats["wins"]
+    )
+
+    print(
+        "Losses:",
+        stats["losses"]
+    )
+
+    print(
+        "Winrate:",
+        stats["winrate"],
+        "%"
+    )
+
+    print(
+        "Total PnL:",
+        stats["total_pnl"],
+        "%"
+    )
 
     print("==========================\n")
