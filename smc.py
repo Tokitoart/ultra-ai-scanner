@@ -1,6 +1,13 @@
 import numpy as np
 
 # ==========================================
+# SETTINGS
+# ==========================================
+
+MIN_FVG_SIZE = 0.001
+MIN_OB_VOLUME_RATIO = 1.5
+
+# ==========================================
 # FAIR VALUE GAP (FVG)
 # ==========================================
 
@@ -15,24 +22,38 @@ def detect_fvg(df):
     c3_high = df["high"].iloc[-1]
     c3_low = df["low"].iloc[-1]
 
+    current_price = df["close"].iloc[-1]
+
     # Bullish FVG
 
-    if c3_low > c1_high:
+    gap_up = c3_low - c1_high
+
+    if (
+        gap_up > 0
+        and gap_up > current_price * MIN_FVG_SIZE
+    ):
 
         return {
             "type": "bull",
             "top": c3_low,
-            "bottom": c1_high
+            "bottom": c1_high,
+            "size": gap_up
         }
 
     # Bearish FVG
 
-    if c3_high < c1_low:
+    gap_down = c1_low - c3_high
+
+    if (
+        gap_down > 0
+        and gap_down > current_price * MIN_FVG_SIZE
+    ):
 
         return {
             "type": "bear",
             "top": c1_low,
-            "bottom": c3_high
+            "bottom": c3_high,
+            "size": gap_down
         }
 
     return None
@@ -43,25 +64,29 @@ def detect_fvg(df):
 
 def detect_order_block(df):
 
-    if len(df) < 10:
+    if len(df) < 20:
         return None
 
     last = df.iloc[-1]
 
     body = abs(
-        last["close"] - last["open"]
+        last["close"]
+        - last["open"]
     )
 
     candle_range = (
-        last["high"] - last["low"]
+        last["high"]
+        - last["low"]
     )
 
-    if candle_range == 0:
+    if candle_range <= 0:
         return None
 
-    body_ratio = body / candle_range
+    body_ratio = (
+        body / candle_range
+    )
 
-    if body_ratio < 0.7:
+    if body_ratio < 0.65:
         return None
 
     avg_volume = (
@@ -70,28 +95,37 @@ def detect_order_block(df):
         .mean()
     )
 
-    if avg_volume == 0:
+    if avg_volume <= 0:
         return None
 
     volume_ratio = (
-        last["volume"] / avg_volume
+        last["volume"]
+        / avg_volume
     )
 
-    if volume_ratio < 2:
+    if volume_ratio < MIN_OB_VOLUME_RATIO:
         return None
 
     if last["close"] > last["open"]:
 
         return {
             "type": "bull",
-            "price": last["low"]
+            "price": float(last["low"]),
+            "volume_ratio": round(
+                volume_ratio,
+                2
+            )
         }
 
     if last["close"] < last["open"]:
 
         return {
             "type": "bear",
-            "price": last["high"]
+            "price": float(last["high"]),
+            "volume_ratio": round(
+                volume_ratio,
+                2
+            )
         }
 
     return None
@@ -117,14 +151,15 @@ def detect_mitigation(df):
         .min()
     )
 
-    close = df["close"].iloc[-1]
+    close = (
+        df["close"]
+        .iloc[-1]
+    )
 
-    if close > recent_high * 0.995:
-
+    if close >= recent_high * 0.995:
         return "bull"
 
-    if close < recent_low * 1.005:
-
+    if close <= recent_low * 1.005:
         return "bear"
 
     return None
@@ -134,6 +169,9 @@ def detect_mitigation(df):
 # ==========================================
 
 def premium_discount_zone(df):
+
+    if len(df) < 50:
+        return None
 
     swing_high = (
         df["high"]
@@ -153,17 +191,17 @@ def premium_discount_zone(df):
     )
 
     midpoint = (
-        swing_high + swing_low
+        swing_high
+        + swing_low
     ) / 2
 
     if current_price < midpoint:
-
         return "discount"
 
     return "premium"
 
 # ==========================================
-# CONFLUENCE SCORE
+# SMC SCORE
 # ==========================================
 
 def smc_score(
