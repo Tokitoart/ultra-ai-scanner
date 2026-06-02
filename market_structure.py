@@ -7,7 +7,6 @@ from config import (
 
 # ==========================================
 # BOS
-# Break Of Structure
 # ==========================================
 
 def detect_bos(df):
@@ -25,10 +24,8 @@ def detect_bos(df):
 
     return None
 
-
 # ==========================================
 # CHOCH
-# Change Of Character
 # ==========================================
 
 def detect_choch(df):
@@ -50,20 +47,27 @@ def detect_choch(df):
 
     if high_slope < 0 and low_slope < 0:
 
-        recent_high = df["high"].iloc[-10:-1].max()
+        recent_high = (
+            df["high"]
+            .iloc[-10:-1]
+            .max()
+        )
 
         if df["close"].iloc[-1] > recent_high:
             return "bull"
 
     if high_slope > 0 and low_slope > 0:
 
-        recent_low = df["low"].iloc[-10:-1].min()
+        recent_low = (
+            df["low"]
+            .iloc[-10:-1]
+            .min()
+        )
 
         if df["close"].iloc[-1] < recent_low:
             return "bear"
 
     return None
-
 
 # ==========================================
 # LIQUIDITY SWEEP
@@ -71,32 +75,57 @@ def detect_choch(df):
 
 def detect_liquidity_sweep(df):
 
-    recent_low = df["low"].iloc[-21:-2].min()
+    recent_low = (
+        df["low"]
+        .iloc[-21:-2]
+        .min()
+    )
 
-    candle_low = df["low"].iloc[-2]
+    candle_low = (
+        df["low"]
+        .iloc[-2]
+    )
 
-    candle_close = df["close"].iloc[-2]
+    candle_close = (
+        df["close"]
+        .iloc[-2]
+    )
 
-    if candle_low < recent_low and candle_close > recent_low:
+    if (
+        candle_low < recent_low
+        and candle_close > recent_low
+    ):
         return "bull"
 
-    recent_high = df["high"].iloc[-21:-2].max()
+    recent_high = (
+        df["high"]
+        .iloc[-21:-2]
+        .max()
+    )
 
-    candle_high = df["high"].iloc[-2]
+    candle_high = (
+        df["high"]
+        .iloc[-2]
+    )
 
-    if candle_high > recent_high and candle_close < recent_high:
+    if (
+        candle_high > recent_high
+        and candle_close < recent_high
+    ):
         return "bear"
 
     return None
 
-
 # ==========================================
-# VOLUME EXPANSION
+# VOLUME
 # ==========================================
 
 def volume_expansion(df):
 
-    current_volume = df["volume"].iloc[-1]
+    current_volume = (
+        df["volume"]
+        .iloc[-1]
+    )
 
     avg_volume = (
         df["volume"]
@@ -104,14 +133,13 @@ def volume_expansion(df):
         .mean()
     )
 
-    if avg_volume == 0:
+    if avg_volume <= 0:
         return 0
 
     return round(
         current_volume / avg_volume,
         2
     )
-
 
 # ==========================================
 # VOLUME FILTER
@@ -121,8 +149,9 @@ def volume_confirmed(df):
 
     ratio = volume_expansion(df)
 
-    return ratio >= MIN_VOLUME_RATIO
-
+    return (
+        ratio >= MIN_VOLUME_RATIO
+    )
 
 # ==========================================
 # FLAT FILTER
@@ -137,14 +166,19 @@ def is_flat(df):
         .iloc[-1]
     )
 
-    close = df["close"].iloc[-1]
+    close = (
+        df["close"]
+        .iloc[-1]
+    )
 
     atr_percent = (
         atr / close
     ) * 100
 
-    return atr_percent < MIN_ATR_PERCENT
-
+    return (
+        atr_percent
+        < MIN_ATR_PERCENT
+    )
 
 # ==========================================
 # TREND
@@ -174,7 +208,6 @@ def detect_trend(df):
 
     return "flat"
 
-
 # ==========================================
 # AI SCORE
 # ==========================================
@@ -185,45 +218,50 @@ def calculate_ai_score(
     choch,
     sweep,
     volume_ratio,
-    pattern=False
+    pattern=False,
+    smc_score=0
 ):
 
     score = 0
-    reasons = []
 
-    # Trend
+    reasons = []
 
     if trend in ["bull", "bear"]:
 
         score += 10
-        reasons.append(f"Trend {trend}")
 
-    # BOS
+        reasons.append(
+            f"Trend {trend}"
+        )
 
     if bos:
 
         score += 25
-        reasons.append("BOS")
 
-    # CHOCH
+        reasons.append(
+            "BOS"
+        )
 
     if choch:
 
         score += 25
-        reasons.append("CHOCH")
 
-    # Sweep
+        reasons.append(
+            "CHOCH"
+        )
 
     if sweep:
 
         score += 20
-        reasons.append("Liquidity Sweep")
 
-    # Volume
+        reasons.append(
+            "Liquidity Sweep"
+        )
 
     if volume_ratio >= 3:
 
         score += 20
+
         reasons.append(
             f"Volume x{volume_ratio}"
         )
@@ -231,6 +269,7 @@ def calculate_ai_score(
     elif volume_ratio >= 2:
 
         score += 15
+
         reasons.append(
             f"Volume x{volume_ratio}"
         )
@@ -238,29 +277,31 @@ def calculate_ai_score(
     elif volume_ratio >= 1.8:
 
         score += 10
+
         reasons.append(
             f"Volume x{volume_ratio}"
         )
 
-    # Pattern
-
     if pattern:
 
         score += 10
-        reasons.append(pattern)
 
-    # Multi Confirmation
+        reasons.append(
+            pattern
+        )
+
+    score += smc_score
 
     confirmations = 0
 
-    if bos:
-        confirmations += 1
+    for signal in [
+        bos,
+        choch,
+        sweep
+    ]:
 
-    if choch:
-        confirmations += 1
-
-    if sweep:
-        confirmations += 1
+        if signal:
+            confirmations += 1
 
     if volume_ratio >= 1.8:
         confirmations += 1
@@ -268,9 +309,13 @@ def calculate_ai_score(
     if pattern:
         confirmations += 1
 
+    if smc_score >= 20:
+        confirmations += 1
+
     if confirmations >= 3:
 
         score += 15
+
         reasons.append(
             "Multi Confirmation"
         )
@@ -278,39 +323,63 @@ def calculate_ai_score(
     if confirmations >= 4:
 
         score += 10
+
         reasons.append(
             "Strong Confluence"
         )
 
     return score, reasons
 
-
 # ==========================================
-# ENTRY DECISION
+# DIRECTION
 # ==========================================
 
 def get_direction(
     trend,
     bos,
     choch,
-    sweep
+    sweep,
+    fvg=None,
+    order_block=None,
+    mitigation=None
 ):
 
-    bull_signals = 0
-    bear_signals = 0
+    bull = 0
+    bear = 0
 
-    for signal in [bos, choch, sweep]:
+    for signal in [
+        bos,
+        choch,
+        sweep,
+        mitigation
+    ]:
 
         if signal == "bull":
-            bull_signals += 1
+            bull += 1
 
         if signal == "bear":
-            bear_signals += 1
+            bear += 1
 
-    if trend == "bull" and bull_signals >= 2:
+    if fvg:
+
+        if fvg["type"] == "bull":
+            bull += 1
+
+        if fvg["type"] == "bear":
+            bear += 1
+
+    if order_block:
+
+        if order_block["type"] == "bull":
+            bull += 1
+
+        if order_block["type"] == "bear":
+            bear += 1
+
+    if trend == "bull" and bull >= 3:
         return "LONG"
 
-    if trend == "bear" and bear_signals >= 2:
+    if trend == "bear" and bear >= 3:
         return "SHORT"
 
     return None
