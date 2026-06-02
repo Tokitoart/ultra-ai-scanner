@@ -1,9 +1,8 @@
 import requests
 import pandas as pd
+import time
 
-from config import (
-    TOP_SYMBOLS_LIMIT
-)
+from config import TOP_SYMBOLS_LIMIT
 
 # ==========================================
 # BYBIT URL
@@ -12,7 +11,34 @@ from config import (
 BASE_URL = "https://api.bybit.com"
 
 # ==========================================
-# GET TOP SYMBOLS
+# REQUEST
+# ==========================================
+
+def safe_request(url, params=None, retries=3):
+
+    for _ in range(retries):
+
+        try:
+
+            response = requests.get(
+                url,
+                params=params,
+                timeout=20
+            )
+
+            if response.status_code == 200:
+
+                return response.json()
+
+        except Exception:
+            pass
+
+        time.sleep(1)
+
+    return None
+
+# ==========================================
+# TOP SYMBOLS
 # ==========================================
 
 def get_top_symbols():
@@ -25,16 +51,12 @@ def get_top_symbols():
             "?category=linear"
         )
 
-        response = requests.get(
-            url,
-            timeout=20
-        )
+        data = safe_request(url)
 
-        data = response.json()
+        if not data:
+            return []
 
-        tickers = (
-            data["result"]["list"]
-        )
+        tickers = data["result"]["list"]
 
         symbols = []
 
@@ -51,8 +73,15 @@ def get_top_symbols():
                     item["turnover24h"]
                 )
 
+                price = float(
+                    item["lastPrice"]
+                )
+
             except:
-                turnover = 0
+                continue
+
+            if price <= 0:
+                continue
 
             symbols.append(
                 (
@@ -61,8 +90,7 @@ def get_top_symbols():
                 )
             )
 
-        symbols = sorted(
-            symbols,
+        symbols.sort(
             key=lambda x: x[1],
             reverse=True
         )
@@ -84,7 +112,7 @@ def get_top_symbols():
         return []
 
 # ==========================================
-# GET KLINES
+# KLINES
 # ==========================================
 
 def get_klines(
@@ -107,17 +135,20 @@ def get_klines(
             "limit": limit
         }
 
-        response = requests.get(
+        data = safe_request(
             url,
-            params=params,
-            timeout=20
+            params
         )
 
-        data = response.json()
+        if not data:
+            return None
 
         rows = (
             data["result"]["list"]
         )
+
+        if not rows:
+            return None
 
         rows.reverse()
 
@@ -134,16 +165,14 @@ def get_klines(
             ]
         )
 
-        numeric_cols = [
+        for col in [
             "open",
             "high",
             "low",
             "close",
             "volume",
             "turnover"
-        ]
-
-        for col in numeric_cols:
+        ]:
 
             df[col] = (
                 df[col]
@@ -160,6 +189,62 @@ def get_klines(
         )
 
         return None
+
+# ==========================================
+# CURRENT PRICE
+# ==========================================
+
+def get_price(symbol):
+
+    try:
+
+        url = (
+            f"{BASE_URL}"
+            "/v5/market/tickers"
+        )
+
+        params = {
+            "category": "linear",
+            "symbol": symbol
+        }
+
+        data = safe_request(
+            url,
+            params
+        )
+
+        if not data:
+            return None
+
+        ticker = (
+            data["result"]["list"][0]
+        )
+
+        return float(
+            ticker["lastPrice"]
+        )
+
+    except:
+
+        return None
+
+# ==========================================
+# ATR
+# ==========================================
+
+def calculate_atr(df, period=14):
+
+    high_low = (
+        df["high"]
+        - df["low"]
+    )
+
+    return (
+        high_low
+        .rolling(period)
+        .mean()
+        .iloc[-1]
+    )
 
 # ==========================================
 # HEALTH CHECK
@@ -188,7 +273,7 @@ def exchange_alive():
         return False
 
 # ==========================================
-# VALID DATA
+# VALID DF
 # ==========================================
 
 def valid_df(df):
