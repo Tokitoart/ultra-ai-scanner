@@ -32,7 +32,10 @@ stats = {
 
 def can_open_trade():
 
-    return len(active_trades) < MAX_ACTIVE_TRADES
+    return (
+        len(active_trades)
+        < MAX_ACTIVE_TRADES
+    )
 
 # ==========================================
 # OPEN TRADE
@@ -48,7 +51,9 @@ def open_trade(signal):
 
     active_trades[symbol] = signal
 
-    print(f"✅ OPEN TRADE: {symbol}")
+    print(
+        f"✅ OPEN TRADE: {symbol}"
+    )
 
 # ==========================================
 # CLOSE TRADE
@@ -62,7 +67,7 @@ def close_trade(
 ):
 
     if symbol not in active_trades:
-        return
+        return None
 
     trade = active_trades[symbol]
 
@@ -89,6 +94,21 @@ def close_trade(
         1 + pnl / 100
     )
 
+    closed_trade = {
+
+        "symbol": trade["symbol"],
+
+        "direction": trade["direction"],
+
+        "entry": trade["entry"],
+
+        "exit": exit_price,
+
+        "pnl": pnl,
+
+        "reason": reason
+    }
+
     del active_trades[symbol]
 
     print(
@@ -96,6 +116,8 @@ def close_trade(
         f"{round(pnl,2)}% | "
         f"{reason}"
     )
+
+    return closed_trade
 
 # ==========================================
 # WINRATE
@@ -109,7 +131,9 @@ def get_winrate():
         return 0
 
     return round(
-        stats["wins"] / trades * 100,
+        stats["wins"]
+        / trades
+        * 100,
         2
     )
 
@@ -120,18 +144,23 @@ def get_winrate():
 def get_stats():
 
     return {
+
         "balance": round(
             stats["balance"],
             2
         ),
+
         "wins": stats["wins"],
+
         "losses": stats["losses"],
+
         "total_trades": stats["total_trades"],
+
         "winrate": get_winrate()
     }
 
 # ==========================================
-# BREAKEVEN CHECK
+# BREAKEVEN
 # ==========================================
 
 def move_to_breakeven(
@@ -157,7 +186,7 @@ def move_to_breakeven(
     return trade
 
 # ==========================================
-# TRAILING LOGIC
+# TRAILING DATA
 # ==========================================
 
 def update_highest_pnl(
@@ -170,7 +199,7 @@ def update_highest_pnl(
         trade["highest_pnl"] = pnl
 
 # ==========================================
-# TIME EXIT
+# TRADE EXPIRED
 # ==========================================
 
 def trade_expired(trade):
@@ -180,12 +209,16 @@ def trade_expired(trade):
         - trade["open_time"]
     )
 
-    hours = elapsed / 3600
+    hours = (
+        elapsed / 3600
+    )
 
-    return hours >= MAX_TRADE_HOURS
+    return (
+        hours >= MAX_TRADE_HOURS
+    )
 
 # ==========================================
-# GET ACTIVE
+# ACTIVE TRADES
 # ==========================================
 
 def get_active_trades():
