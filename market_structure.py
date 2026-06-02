@@ -148,7 +148,6 @@ def is_flat(df):
 
 # ==========================================
 # TREND
-# 1H
 # ==========================================
 
 def detect_trend(df):
@@ -190,40 +189,98 @@ def calculate_ai_score(
 ):
 
     score = 0
-
     reasons = []
 
-    if trend:
+    # Trend
+
+    if trend in ["bull", "bear"]:
+
         score += 10
-        reasons.append("Trend")
+        reasons.append(f"Trend {trend}")
+
+    # BOS
 
     if bos:
+
         score += 25
         reasons.append("BOS")
 
+    # CHOCH
+
     if choch:
+
         score += 25
         reasons.append("CHOCH")
 
+    # Sweep
+
     if sweep:
+
         score += 20
         reasons.append("Liquidity Sweep")
 
-    if volume_ratio >= 2:
+    # Volume
+
+    if volume_ratio >= 3:
+
+        score += 20
+        reasons.append(
+            f"Volume x{volume_ratio}"
+        )
+
+    elif volume_ratio >= 2:
+
         score += 15
         reasons.append(
             f"Volume x{volume_ratio}"
         )
 
     elif volume_ratio >= 1.8:
+
         score += 10
         reasons.append(
             f"Volume x{volume_ratio}"
         )
 
+    # Pattern
+
     if pattern:
+
         score += 10
         reasons.append(pattern)
+
+    # Multi Confirmation
+
+    confirmations = 0
+
+    if bos:
+        confirmations += 1
+
+    if choch:
+        confirmations += 1
+
+    if sweep:
+        confirmations += 1
+
+    if volume_ratio >= 1.8:
+        confirmations += 1
+
+    if pattern:
+        confirmations += 1
+
+    if confirmations >= 3:
+
+        score += 15
+        reasons.append(
+            "Multi Confirmation"
+        )
+
+    if confirmations >= 4:
+
+        score += 10
+        reasons.append(
+            "Strong Confluence"
+        )
 
     return score, reasons
 
@@ -239,24 +296,21 @@ def get_direction(
     sweep
 ):
 
-    bullish = (
-        trend == "bull"
-        and bos == "bull"
-        and choch == "bull"
-        and sweep == "bull"
-    )
+    bull_signals = 0
+    bear_signals = 0
 
-    bearish = (
-        trend == "bear"
-        and bos == "bear"
-        and choch == "bear"
-        and sweep == "bear"
-    )
+    for signal in [bos, choch, sweep]:
 
-    if bullish:
+        if signal == "bull":
+            bull_signals += 1
+
+        if signal == "bear":
+            bear_signals += 1
+
+    if trend == "bull" and bull_signals >= 2:
         return "LONG"
 
-    if bearish:
+    if trend == "bear" and bear_signals >= 2:
         return "SHORT"
 
     return None
