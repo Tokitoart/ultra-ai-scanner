@@ -5,10 +5,25 @@ import time
 from config import TOP_SYMBOLS_LIMIT
 
 # ==========================================
-# BYBIT URL
+# BINANCE URL
 # ==========================================
 
-BASE_URL = "https://api.bytick.com"
+BASE_URL = "https://fapi.binance.com"
+
+# ==========================================
+# INTERVAL MAP
+# ==========================================
+
+INTERVAL_MAP = {
+    "1": "1m",
+    "3": "3m",
+    "5": "5m",
+    "15": "15m",
+    "30": "30m",
+    "60": "1h",
+    "240": "4h",
+    "D": "1d"
+}
 
 # ==========================================
 # SAFE REQUEST
@@ -31,29 +46,12 @@ def safe_request(url, params=None, retries=3):
                 timeout=20
             )
 
-            print(
-                f"REQUEST: {response.url} | STATUS: {response.status_code}"
-            )
-
             if response.status_code == 200:
+                return response.json()
 
-                data = response.json()
-
-                print(
-                    f"SUCCESS: {data.get('retCode', 'NO_CODE')}"
-                )
-
-                return data
-
-            else:
-
-                print(
-                    f"HTTP ERROR: {response.status_code}"
-                )
-
-                print(
-                    response.text[:500]
-                )
+            print(
+                f"BINANCE HTTP ERROR: {response.status_code}"
+            )
 
         except Exception as e:
 
@@ -75,22 +73,17 @@ def get_top_symbols():
 
         url = (
             f"{BASE_URL}"
-            "/v5/market/tickers"
-            "?category=linear"
+            "/fapi/v1/ticker/24hr"
         )
 
         data = safe_request(url)
 
-        print("BYBIT RESPONSE:", data)
-
         if not data:
             return []
 
-        tickers = data["result"]["list"]
-
         symbols = []
 
-        for item in tickers:
+        for item in data:
 
             symbol = item["symbol"]
 
@@ -100,7 +93,7 @@ def get_top_symbols():
             try:
 
                 turnover = float(
-                    item["turnover24h"]
+                    item["quoteVolume"]
                 )
 
                 price = float(
@@ -125,12 +118,18 @@ def get_top_symbols():
             reverse=True
         )
 
-        return [
+        result = [
             x[0]
             for x in symbols[
                 :TOP_SYMBOLS_LIMIT
             ]
         ]
+
+        print(
+            f"SYMBOLS FOUND: {len(result)}"
+        )
+
+        return result
 
     except Exception as e:
 
@@ -153,32 +152,29 @@ def get_klines(
 
     try:
 
+        interval = INTERVAL_MAP.get(
+            str(interval),
+            "15m"
+        )
+
         url = (
             f"{BASE_URL}"
-            "/v5/market/kline"
+            "/fapi/v1/klines"
         )
 
         params = {
-            "category": "linear",
             "symbol": symbol,
             "interval": interval,
             "limit": limit
         }
 
-        data = safe_request(
+        rows = safe_request(
             url,
             params
         )
 
-        if not data:
-            return None
-
-        rows = data["result"]["list"]
-
         if not rows:
             return None
-
-        rows.reverse()
 
         df = pd.DataFrame(
             rows,
@@ -189,17 +185,32 @@ def get_klines(
                 "low",
                 "close",
                 "volume",
-                "turnover"
+                "close_time",
+                "quote_asset_volume",
+                "trades",
+                "tb_base",
+                "tb_quote",
+                "ignore"
             ]
         )
+
+        df = df[
+            [
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume"
+            ]
+        ]
 
         for col in [
             "open",
             "high",
             "low",
             "close",
-            "volume",
-            "turnover"
+            "volume"
         ]:
 
             df[col] = (
@@ -217,7 +228,6 @@ def get_klines(
         )
 
         return None
-
 # ==========================================
 # CURRENT PRICE
 # ==========================================
@@ -228,11 +238,10 @@ def get_price(symbol):
 
         url = (
             f"{BASE_URL}"
-            "/v5/market/tickers"
+            "/fapi/v1/ticker/price"
         )
 
         params = {
-            "category": "linear",
             "symbol": symbol
         }
 
@@ -244,16 +253,16 @@ def get_price(symbol):
         if not data:
             return None
 
-        ticker_list = data["result"]["list"]
-
-        if not ticker_list:
-            return None
-
         return float(
-            ticker_list[0]["lastPrice"]
+            data["price"]
         )
 
-    except:
+    except Exception as e:
+
+        print(
+            f"PRICE ERROR {symbol}:",
+            e
+        )
 
         return None
 
@@ -306,39 +315,39 @@ def exchange_alive():
 
         url = (
             f"{BASE_URL}"
-            "/v5/market/time"
+            "/fapi/v1/ping"
         )
 
         response = requests.get(
             url,
-            timeout=15
+            timeout=10
         )
 
-        if response.status_code != 200:
-            print(
-                f"BYBIT HTTP ERROR: {response.status_code}"
-            )
-            return False
-
-        data = response.json()
-
-        if data.get("retCode") != 0:
+        if response.status_code == 200:
 
             print(
-                f"BYBIT API ERROR: {data}"
+                "BINANCE CONNECTION OK"
             )
 
-            return False
+            return True
 
-        return True
+        print(
+            f"BINANCE HTTP ERROR: {response.status_code}"
+        )
+
+        return False
 
     except Exception as e:
 
         print(
-            f"BYBIT CONNECTION ERROR: {e}"
+            f"BINANCE CONNECTION ERROR: {e}"
         )
 
         return False
+
+# ==========================================
+# VALID DF
+# ==========================================
 
 def valid_df(df):
 
@@ -361,4 +370,4 @@ def valid_df(df):
         if col not in df.columns:
             return False
 
-    return True
+    return True       
