@@ -280,20 +280,34 @@ def exchange_alive():
 
         response = requests.get(
             url,
-            timeout=10
+            timeout=15
         )
 
-        return (
-            response.status_code == 200
-        )
+        if response.status_code != 200:
+            print(
+                f"BYBIT HTTP ERROR: {response.status_code}"
+            )
+            return False
 
-    except:
+        data = response.json()
+
+        if data.get("retCode") != 0:
+
+            print(
+                f"BYBIT API ERROR: {data}"
+            )
+
+            return False
+
+        return True
+
+    except Exception as e:
+
+        print(
+            f"BYBIT CONNECTION ERROR: {e}"
+        )
 
         return False
-
-# ==========================================
-# VALID DF
-# ==========================================
 
 def valid_df(df):
 
