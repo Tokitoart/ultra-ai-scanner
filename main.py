@@ -226,7 +226,7 @@ def monitor_trades():
 
     remove_list = []
 
-    for symbol, trade in list(active.items()):
+    for symbol, trade in active.items():
 
         try:
 
