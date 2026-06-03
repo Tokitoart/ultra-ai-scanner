@@ -11,7 +11,7 @@ from config import TOP_SYMBOLS_LIMIT
 BASE_URL = "https://api.bybit.com"
 
 # ==========================================
-# REQUEST
+# SAFE REQUEST
 # ==========================================
 
 def safe_request(url, params=None, retries=3):
@@ -27,7 +27,6 @@ def safe_request(url, params=None, retries=3):
             )
 
             if response.status_code == 200:
-
                 return response.json()
 
         except Exception:
@@ -143,9 +142,7 @@ def get_klines(
         if not data:
             return None
 
-        rows = (
-            data["result"]["list"]
-        )
+        rows = data["result"]["list"]
 
         if not rows:
             return None
@@ -216,12 +213,13 @@ def get_price(symbol):
         if not data:
             return None
 
-        ticker = (
-            data["result"]["list"][0]
-        )
+        ticker_list = data["result"]["list"]
+
+        if not ticker_list:
+            return None
 
         return float(
-            ticker["lastPrice"]
+            ticker_list[0]["lastPrice"]
         )
 
     except:
@@ -232,19 +230,40 @@ def get_price(symbol):
 # ATR
 # ==========================================
 
-def calculate_atr(df, period=14):
+def calculate_atr(
+    df,
+    period=14
+):
 
-    high_low = (
-        df["high"]
-        - df["low"]
-    )
+    if len(df) < period + 1:
+        return 0
 
-    return (
-        high_low
-        .rolling(period)
+    high = df["high"]
+    low = df["low"]
+    close = df["close"]
+
+    tr1 = high - low
+
+    tr2 = (
+        high - close.shift(1)
+    ).abs()
+
+    tr3 = (
+        low - close.shift(1)
+    ).abs()
+
+    tr = pd.concat(
+        [tr1, tr2, tr3],
+        axis=1
+    ).max(axis=1)
+
+    atr = (
+        tr.rolling(period)
         .mean()
         .iloc[-1]
     )
+
+    return float(atr)
 
 # ==========================================
 # HEALTH CHECK
@@ -283,5 +302,18 @@ def valid_df(df):
 
     if len(df) < 100:
         return False
+
+    required = [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+    ]
+
+    for col in required:
+
+        if col not in df.columns:
+            return False
 
     return True
