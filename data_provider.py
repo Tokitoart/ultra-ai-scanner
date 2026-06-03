@@ -52,6 +52,8 @@ def get_top_symbols():
 
         data = safe_request(url)
 
+        print("BYBIT RESPONSE:", data)
+
         if not data:
             return []
 
