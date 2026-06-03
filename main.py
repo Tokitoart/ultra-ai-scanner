@@ -421,11 +421,13 @@ def main():
 
     if not exchange_alive():
 
-        print(
-            "BYBIT CONNECTION FAILED"
-        )
+    print(
+        "WARNING: BYBIT HEALTH CHECK FAILED"
+    )
 
-        return
+    print(
+        "CONTINUING ANYWAY..."
+    )
 
     send_startup()
 
