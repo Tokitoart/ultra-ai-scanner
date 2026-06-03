@@ -8,7 +8,7 @@ from config import TOP_SYMBOLS_LIMIT
 # BYBIT URL
 # ==========================================
 
-BASE_URL = "https://api.bybit.com"
+BASE_URL = "https://api.bytick.com"
 
 # ==========================================
 # SAFE REQUEST
