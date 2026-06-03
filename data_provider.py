@@ -16,23 +16,52 @@ BASE_URL = "https://api.bytick.com"
 
 def safe_request(url, params=None, retries=3):
 
-    for _ in range(retries):
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    for attempt in range(retries):
 
         try:
 
             response = requests.get(
                 url,
                 params=params,
+                headers=headers,
                 timeout=20
             )
 
+            print(
+                f"REQUEST: {response.url} | STATUS: {response.status_code}"
+            )
+
             if response.status_code == 200:
-                return response.json()
 
-        except Exception:
-            pass
+                data = response.json()
 
-        time.sleep(1)
+                print(
+                    f"SUCCESS: {data.get('retCode', 'NO_CODE')}"
+                )
+
+                return data
+
+            else:
+
+                print(
+                    f"HTTP ERROR: {response.status_code}"
+                )
+
+                print(
+                    response.text[:500]
+                )
+
+        except Exception as e:
+
+            print(
+                f"REQUEST ERROR: {e}"
+            )
+
+        time.sleep(2)
 
     return None
 
