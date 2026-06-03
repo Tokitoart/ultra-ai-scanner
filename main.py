@@ -355,6 +355,8 @@ def scan_market():
 
     symbols = get_top_symbols()
 
+    print(f"SYMBOLS FOUND: {len(symbols)}")
+
     best_signal = None
 
     for symbol in symbols:
