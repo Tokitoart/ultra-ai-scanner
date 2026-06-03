@@ -323,6 +323,14 @@ def exchange_alive():
             timeout=10
         )
 
+        print(
+            f"PING STATUS: {response.status_code}"
+        )
+
+        print(
+            f"PING RESPONSE: {response.text[:500]}"
+        )
+
         if response.status_code == 200:
 
             print(
@@ -344,10 +352,6 @@ def exchange_alive():
         )
 
         return False
-
-# ==========================================
-# VALID DF
-# ==========================================
 
 def valid_df(df):
 
