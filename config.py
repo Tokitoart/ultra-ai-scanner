@@ -32,7 +32,7 @@ SCAN_INTERVAL = 180
 
 TOP_SYMBOLS_LIMIT = 100
 
-MIN_AI_SCORE = 60
+MIN_AI_SCORE = 50
 
 # ==========================================
 # VOLUME FILTER
