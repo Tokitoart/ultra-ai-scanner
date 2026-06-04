@@ -87,15 +87,19 @@ def build_signal(symbol):
         )
 
         if not valid_df(df1h):
+            print(f"{symbol} FAIL DF1H")
             return None
 
         if not valid_df(df15):
+            print(f"{symbol} FAIL DF15")
             return None
 
         if not valid_df(df5):
+            print(f"{symbol} FAIL DF5")
             return None
 
         if is_flat(df15):
+            print(f"{symbol} FLAT")
             return None
 
         trend = detect_trend(
@@ -130,6 +134,7 @@ def build_signal(symbol):
         )
 
         if not direction:
+            print(f"{symbol} NO_DIRECTION")
             return None
 
         score, reasons = (
