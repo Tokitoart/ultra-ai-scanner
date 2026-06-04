@@ -125,10 +125,6 @@ def get_top_symbols():
             ]
         ]
 
-        print(
-            f"SYMBOLS FOUND: {len(result)}"
-        )
-
         return result
 
     except Exception as e:
