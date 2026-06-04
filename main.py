@@ -133,6 +133,10 @@ def build_signal(symbol):
             sweep
         )
 
+        print(
+            f"{symbol} trend={trend} bos={bos} choch={choch} sweep={sweep}"
+        )
+
         if not direction:
             print(f"{symbol} NO_DIRECTION")
             return None
