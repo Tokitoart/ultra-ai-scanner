@@ -376,10 +376,16 @@ def get_direction(
         if order_block["type"] == "bear":
             bear += 1
 
-    if trend == "bull" and bull >= 3:
+    if trend == "bull" and bull >= 1:
         return "LONG"
 
-    if trend == "bear" and bear >= 3:
+    if trend == "bear" and bear >= 1:
+        return "SHORT"
+
+    if trend == "bull":
+        return "LONG"
+
+    if trend == "bear":
         return "SHORT"
 
     return None
