@@ -172,6 +172,10 @@ def build_signal(symbol):
             smc_reasons
         )
 
+        print(
+            f"{symbol} SCORE={score} DIR={direction}"
+        )
+
         if score < MIN_AI_SCORE:
             return None
 
