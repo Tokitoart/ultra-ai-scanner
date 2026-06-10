@@ -34,10 +34,7 @@ stats = {
 
 def can_open_trade():
 
-    return (
-        len(active_trades)
-        < MAX_ACTIVE_TRADES
-    )
+    return len(active_trades) < MAX_ACTIVE_TRADES
 
 # ==========================================
 # OPEN TRADE
@@ -53,9 +50,7 @@ def open_trade(signal):
 
     active_trades[symbol] = signal
 
-    print(
-        f"✅ OPEN TRADE: {symbol}"
-    )
+    print(f"✅ OPEN TRADE: {symbol}")
 
 # ==========================================
 # CLOSE TRADE
@@ -85,11 +80,8 @@ def close_trade(
     stats["total_trades"] += 1
 
     if pnl >= 0:
-
         stats["wins"] += 1
-
     else:
-
         stats["losses"] += 1
 
     stats["balance"] *= (
@@ -109,7 +101,7 @@ def close_trade(
 
     print(
         f"🏁 CLOSE {symbol} | "
-        f"{round(pnl,2)}% | "
+        f"{round(pnl, 2)}% | "
         f"{reason}"
     )
 
@@ -127,9 +119,8 @@ def get_winrate():
         return 0
 
     return round(
-        stats["wins"]
-        / trades
-        * 100,
+        stats["wins"] /
+        trades * 100,
         2
     )
 
@@ -221,9 +212,7 @@ def trade_expired(trade):
         - trade["open_time"]
     )
 
-    hours = (
-        elapsed / 3600
-    )
+    hours = elapsed / 3600
 
     return (
         hours >= MAX_TRADE_HOURS
