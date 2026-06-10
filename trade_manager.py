@@ -4,7 +4,9 @@ from config import (
     START_BALANCE,
     MAX_ACTIVE_TRADES,
     BREAKEVEN_TRIGGER,
-    MAX_TRADE_HOURS
+    MAX_TRADE_HOURS,
+    TRAILING_START,
+    TRAILING_GIVEBACK
 )
 
 from journal import save_trade
@@ -95,17 +97,11 @@ def close_trade(
     )
 
     closed_trade = {
-
         "symbol": trade["symbol"],
-
         "direction": trade["direction"],
-
         "entry": trade["entry"],
-
         "exit": exit_price,
-
         "pnl": pnl,
-
         "reason": reason
     }
 
@@ -144,18 +140,13 @@ def get_winrate():
 def get_stats():
 
     return {
-
         "balance": round(
             stats["balance"],
             2
         ),
-
         "wins": stats["wins"],
-
         "losses": stats["losses"],
-
         "total_trades": stats["total_trades"],
-
         "winrate": get_winrate()
     }
 
@@ -186,7 +177,7 @@ def move_to_breakeven(
     return trade
 
 # ==========================================
-# TRAILING DATA
+# TRACK MAX PROFIT
 # ==========================================
 
 def update_highest_pnl(
@@ -197,6 +188,27 @@ def update_highest_pnl(
     if pnl > trade["highest_pnl"]:
 
         trade["highest_pnl"] = pnl
+
+# ==========================================
+# TRAILING EXIT
+# ==========================================
+
+def should_trailing_exit(
+    trade,
+    pnl
+):
+
+    highest = trade["highest_pnl"]
+
+    if highest < TRAILING_START:
+        return False
+
+    drawdown = highest - pnl
+
+    if drawdown >= TRAILING_GIVEBACK:
+        return True
+
+    return False
 
 # ==========================================
 # TRADE EXPIRED
