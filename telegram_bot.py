@@ -13,11 +13,11 @@ from config import (
 def send_message(text):
 
     if not TELEGRAM_TOKEN:
-        print("❌ TELEGRAM_TOKEN not found")
+        print("TELEGRAM_TOKEN not found")
         return
 
     if not TELEGRAM_CHAT_ID:
-        print("❌ TELEGRAM_CHAT_ID not found")
+        print("TELEGRAM_CHAT_ID not found")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -38,30 +38,34 @@ def send_message(text):
 
     except Exception as e:
 
-        print("Telegram Error:", e)
+        print(
+            "Telegram Error:",
+            e
+        )
 
 # ==========================================
-# START MESSAGE
+# STARTUP
 # ==========================================
 
 def send_startup():
 
     text = f"""
-🚀 <b>ULTRA AI SCANNER V2</b>
+🚀 <b>ULTRA TREND BOT V3</b>
 
-✅ Сканер запущен
+✅ Бот запущен
 
-📊 Режим:
-Smart Money Concept
+📈 Стратегия:
 
-📈 TF:
-1H → Тренд
+4H → Тренд
 
-15M → Структура
+1H → Сила тренда
+
+15M → Волатильность
 
 5M → Вход
 
-1M → Сопровождение
+🎯 Выход:
+Trailing Profit
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
@@ -74,37 +78,32 @@ Smart Money Concept
 
 def send_signal(signal):
 
-    emoji = "🟢" if signal["direction"] == "LONG" else "🔴"
-
-    reasons_text = ""
-
-    for reason in signal["reasons"]:
-        reasons_text += f"✅ {reason}\n"
+    emoji = (
+        "🟢"
+        if signal["direction"] == "LONG"
+        else "🔴"
+    )
 
     text = f"""
-🚨 <b>ULTRA ELITE ENTRY</b>
+🚨 <b>НОВАЯ СДЕЛКА</b>
 
-💰 <b>Монета:</b>
-{signal['symbol']}
+💰 Монета:
+{signal["symbol"]}
 
-{emoji} <b>Направление:</b>
-{signal['direction']}
+{emoji} Направление:
+{signal["direction"]}
 
-🧠 <b>AI Score:</b>
-{signal['score']}
+🎯 Entry:
+{signal["entry"]}
 
-📊 <b>Причины входа:</b>
+📈 ADX:
+{signal["adx"]}
 
-{reasons_text}
+⚡ ATR:
+{signal["atr_percent"]}%
 
-🎯 <b>Entry:</b>
-{signal['entry']}
-
-🛑 <b>Stop Loss:</b>
-{signal['sl']}
-
-🚀 <b>Take Profit:</b>
-Динамический
+📊 Volume:
+x{signal["volume_ratio"]}
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
@@ -117,22 +116,26 @@ def send_signal(signal):
 
 def send_close_trade(trade):
 
-    pnl_color = "🟢" if trade["pnl"] >= 0 else "🔴"
+    pnl_icon = (
+        "🟢"
+        if trade["pnl"] >= 0
+        else "🔴"
+    )
 
     text = f"""
 🏁 <b>СДЕЛКА ЗАКРЫТА</b>
 
-💰 <b>Монета:</b>
-{trade['symbol']}
+💰 Монета:
+{trade["symbol"]}
 
-📈 <b>Направление:</b>
-{trade['direction']}
+📈 Направление:
+{trade["direction"]}
 
-{pnl_color} <b>PnL:</b>
-{round(trade['pnl'], 2)}%
+{pnl_icon} PnL:
+{round(trade["pnl"], 2)}%
 
-📌 <b>Причина:</b>
-{trade['reason']}
+📌 Причина:
+{trade["reason"]}
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
@@ -146,45 +149,22 @@ def send_close_trade(trade):
 def send_daily_report(stats):
 
     text = f"""
-📊 <b>ИТОГ ДНЯ</b>
+📊 <b>СТАТИСТИКА</b>
 
 💰 Баланс:
-{round(stats['balance'], 2)}$
+{stats["balance"]}
 
 🏆 Побед:
-{stats['wins']}
+{stats["wins"]}
 
-❌ Поражений:
-{stats['losses']}
+❌ Убыточных:
+{stats["losses"]}
 
 📈 Winrate:
-{stats['winrate']}%
+{stats["winrate"]}%
 
 📊 Сделок:
-{stats['total_trades']}
-"""
-
-    send_message(text)
-
-# ==========================================
-# PATTERN ALERT
-# ==========================================
-
-def send_pattern_alert(symbol, pattern, timeframe):
-
-    text = f"""
-📐 <b>ОБНАРУЖЕНА ФИГУРА</b>
-
-💰 Монета:
-{symbol}
-
-📊 Фигура:
-{pattern}
-
-⏰ TF:
-{timeframe}
-
-👀 Проверь график вручную
+{stats["total_trades"]}
 """
 
     send_message(text)
