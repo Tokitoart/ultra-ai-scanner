@@ -2,7 +2,6 @@ import time
 
 from config import (
     SCAN_INTERVAL,
-    MIN_AI_SCORE,
     COOLDOWN_HOURS
 )
 
@@ -10,33 +9,11 @@ from data_provider import (
     get_top_symbols,
     get_klines,
     get_price,
-    calculate_atr,
     valid_df,
     exchange_alive
 )
 
-from market_structure import (
-    detect_bos,
-    detect_choch,
-    detect_liquidity_sweep,
-    volume_expansion,
-    detect_trend,
-    calculate_ai_score,
-    get_direction,
-    is_flat
-)
-
-from smc import (
-    detect_fvg,
-    detect_order_block,
-    detect_mitigation,
-    premium_discount_zone,
-    smc_score
-)
-
-from patterns import (
-    detect_pattern
-)
+from strategy import build_signal
 
 from trade_manager import (
     open_trade,
@@ -45,6 +22,7 @@ from trade_manager import (
     can_open_trade,
     move_to_breakeven,
     update_highest_pnl,
+    should_trailing_exit,
     trade_expired
 )
 
@@ -64,161 +42,73 @@ cooldown_symbols = {}
 # BUILD SIGNAL
 # ==========================================
 
-def build_signal(symbol):
+def get_signal(symbol):
 
     try:
+
+        df4h = get_klines(
+            symbol,
+            "240",
+            300
+        )
 
         df1h = get_klines(
             symbol,
             "60",
-            250
+            300
         )
 
         df15 = get_klines(
             symbol,
             "15",
-            250
+            300
         )
 
         df5 = get_klines(
             symbol,
             "5",
-            250
+            300
         )
 
+        if not valid_df(df4h):
+            return None
+
         if not valid_df(df1h):
-            print(f"{symbol} FAIL DF1H")
             return None
 
         if not valid_df(df15):
-            print(f"{symbol} FAIL DF15")
             return None
 
         if not valid_df(df5):
-            print(f"{symbol} FAIL DF5")
             return None
 
-        if is_flat(df15):
-            print(f"{symbol} FLAT")
+        signal = build_signal(
+            symbol,
+            df4h,
+            df1h,
+            df15,
+            df5
+        )
+
+        if not signal:
             return None
 
-        trend = detect_trend(
-            df1h
+        signal["score"] = round(
+            (
+                signal["adx"]
+                + signal["volume_ratio"] * 10
+                + signal["atr_percent"] * 5
+            ),
+            2
         )
 
-        bos = detect_bos(
-            df15
-        )
+        signal["reasons"] = [
+            f"ADX {signal['adx']}",
+            f"Volume {signal['volume_ratio']}",
+            f"ATR {signal['atr_percent']}%"
+        ]
 
-        choch = detect_choch(
-            df15
-        )
-
-        sweep = detect_liquidity_sweep(
-            df15
-        )
-
-        volume_ratio = (
-            volume_expansion(df15)
-        )
-
-        pattern = detect_pattern(
-            df15
-        )
-
-        direction = get_direction(
-            trend,
-            bos,
-            choch,
-            sweep
-        )
-
-        print(
-            f"{symbol} trend={trend} bos={bos} choch={choch} sweep={sweep}"
-        )
-
-        if not direction:
-            print(f"{symbol} NO_DIRECTION")
-            return None
-
-        score, reasons = (
-            calculate_ai_score(
-                trend,
-                bos,
-                choch,
-                sweep,
-                volume_ratio,
-                pattern
-            )
-        )
-
-        fvg = detect_fvg(df15)
-
-        order_block = (
-            detect_order_block(df15)
-        )
-
-        mitigation = (
-            detect_mitigation(df15)
-        )
-
-        zone = (
-            premium_discount_zone(df15)
-        )
-
-        smc_points, smc_reasons = (
-            smc_score(
-                fvg,
-                order_block,
-                mitigation,
-                zone
-            )
-        )
-
-        score += smc_points
-
-        reasons.extend(
-            smc_reasons
-        )
-
-        print(
-            f"{symbol} SCORE={score} DIR={direction}"
-        )
-
-        if score < MIN_AI_SCORE:
-            return None
-
-        entry = (
-            df15["close"]
-            .iloc[-1]
-        )
-
-        atr = calculate_atr(
-            df15
-        )
-
-        if direction == "LONG":
-
-            sl = (
-                entry
-                - atr * 1.5
-            )
-
-        else:
-
-            sl = (
-                entry
-                + atr * 1.5
-            )
-
-        return {
-            "symbol": symbol,
-            "direction": direction,
-            "score": round(score, 2),
-            "entry": round(entry, 6),
-            "sl": round(sl, 6),
-            "reasons": reasons
-        }
+        return signal
 
     except Exception as e:
 
@@ -237,15 +127,13 @@ def monitor_trades():
 
     active = get_active_trades()
 
-    remove_list = []
+    closed_symbols = []
 
     for symbol, trade in list(active.items()):
 
         try:
 
-            price = get_price(
-                symbol
-            )
+            price = get_price(symbol)
 
             if price is None:
                 continue
@@ -277,7 +165,7 @@ def monitor_trades():
                         "STOP LOSS"
                     )
 
-                    remove_list.append(
+                    closed_symbols.append(
                         symbol
                     )
 
@@ -310,7 +198,7 @@ def monitor_trades():
                         "STOP LOSS"
                     )
 
-                    remove_list.append(
+                    closed_symbols.append(
                         symbol
                     )
 
@@ -326,9 +214,32 @@ def monitor_trades():
                 pnl
             )
 
-            if trade_expired(
-                trade
+            if should_trailing_exit(
+                trade,
+                pnl
             ):
+
+                send_close_trade({
+                    "symbol": symbol,
+                    "direction": trade["direction"],
+                    "pnl": pnl,
+                    "reason": "TRAILING EXIT"
+                })
+
+                close_trade(
+                    symbol,
+                    price,
+                    pnl,
+                    "TRAILING EXIT"
+                )
+
+                closed_symbols.append(
+                    symbol
+                )
+
+                continue
+
+            if trade_expired(trade):
 
                 send_close_trade({
                     "symbol": symbol,
@@ -344,7 +255,7 @@ def monitor_trades():
                     "TIME EXIT"
                 )
 
-                remove_list.append(
+                closed_symbols.append(
                     symbol
                 )
 
@@ -355,7 +266,7 @@ def monitor_trades():
                 e
             )
 
-    return remove_list
+    return closed_symbols
 
 # ==========================================
 # SCAN MARKET
@@ -368,7 +279,9 @@ def scan_market():
 
     symbols = get_top_symbols()
 
-    print(f"SYMBOLS FOUND: {len(symbols)}")
+    print(
+        f"SYMBOLS FOUND: {len(symbols)}"
+    )
 
     best_signal = None
 
@@ -386,9 +299,7 @@ def scan_market():
             ):
                 continue
 
-        signal = build_signal(
-            symbol
-        )
+        signal = get_signal(symbol)
 
         if not signal:
             continue
@@ -423,25 +334,21 @@ def scan_market():
 def main():
 
     print(
-        "=================================="
+        "===================================="
     )
 
     print(
-        "ULTRA AI SCANNER STARTED"
+        "ULTRA SCANNER STARTED"
     )
 
     print(
-        "=================================="
+        "===================================="
     )
 
     if not exchange_alive():
 
         print(
-            "WARNING: BYBIT HEALTH CHECK FAILED"
-        )
-
-        print(
-            "CONTINUING ANYWAY..."
+            "WARNING: BINANCE OFFLINE"
         )
 
     send_startup()
@@ -450,9 +357,7 @@ def main():
 
         try:
 
-            closed = (
-                monitor_trades()
-            )
+            closed = monitor_trades()
 
             for symbol in closed:
 
@@ -467,7 +372,7 @@ def main():
             )
 
             print(
-                f"ACTIVE: {active_count}"
+                f"ACTIVE TRADES: {active_count}"
             )
 
             time.sleep(
