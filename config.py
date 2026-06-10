@@ -30,21 +30,71 @@ MAX_ACTIVE_TRADES = 2
 
 SCAN_INTERVAL = 180
 
-TOP_SYMBOLS_LIMIT = 100
+TOP_SYMBOLS_LIMIT = 2
 
-MIN_AI_SCORE = 50
+# ==========================================
+# SYMBOLS
+# ==========================================
+
+TRADING_SYMBOLS = [
+    "BTCUSDT",
+    "ETHUSDT"
+]
+
+# ==========================================
+# TREND FILTER
+# ==========================================
+
+EMA_FAST = 50
+EMA_SLOW = 200
+
+# ==========================================
+# ADX FILTER
+# ==========================================
+
+ADX_PERIOD = 14
+
+MIN_ADX = 20
+
+# ==========================================
+# RSI FILTER
+# ==========================================
+
+RSI_PERIOD = 14
+
+RSI_LONG_LEVEL = 50
+
+RSI_SHORT_LEVEL = 50
+
+# ==========================================
+# ATR ENTRY
+# ==========================================
+
+ATR_PERIOD = 10
+
+ATR_MULTIPLIER = 1.0
 
 # ==========================================
 # VOLUME FILTER
 # ==========================================
 
-MIN_VOLUME_RATIO = 1.8
+MIN_VOLUME_RATIO = 1.3
 
 # ==========================================
 # FLAT FILTER
 # ==========================================
 
-MIN_ATR_PERCENT = 0.4
+MIN_ATR_PERCENT = 0.2
+
+# ==========================================
+# EXITS
+# ==========================================
+
+TAKE_PROFIT_1 = 1.0
+
+TAKE_PROFIT_2 = 2.0
+
+TRAILING_ATR_MULTIPLIER = 1.0
 
 # ==========================================
 # TRADE MANAGEMENT
@@ -52,7 +102,7 @@ MIN_ATR_PERCENT = 0.4
 
 BREAKEVEN_TRIGGER = 0.5
 
-MAX_TRADE_HOURS = 4
+MAX_TRADE_HOURS = 6
 
 # ==========================================
 # JOURNAL
@@ -65,25 +115,3 @@ JOURNAL_FILE = "journal.csv"
 # ==========================================
 
 COOLDOWN_HOURS = 1
-
-# ==========================================
-# AI SCORE WEIGHTS
-# ==========================================
-
-BOS_SCORE = 25
-
-CHOCH_SCORE = 25
-
-SWEEP_SCORE = 20
-
-VOLUME_SCORE = 15
-
-PATTERN_SCORE = 10
-
-TREND_SCORE = 10
-
-# ==========================================
-# PATTERN ALERTS
-# ==========================================
-
-PATTERN_ALERT_COOLDOWN = 21600
