@@ -287,6 +287,11 @@ def scan_market():
 
     for symbol in symbols:
 
+        active = get_active_trades()
+
+        if symbol in active:
+            continue
+        
         if symbol in cooldown_symbols:
 
             elapsed = (
