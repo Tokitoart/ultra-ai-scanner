@@ -242,7 +242,7 @@ def volume_ratio(df):
     )
 
 # ==========================================
-# ENTRY SIGNAL
+# ENTRY SIGNAL 5M
 # ==========================================
 
 def get_entry_signal(df):
