@@ -44,6 +44,14 @@ def open_trade(signal):
 
     symbol = signal["symbol"]
 
+    if symbol in active_trades:
+
+        print(
+            f"SKIP DUPLICATE TRADE: {symbol}"
+        )
+
+        return
+    
     signal["open_time"] = time.time()
 
     signal["highest_pnl"] = 0
