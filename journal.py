@@ -1,3 +1,4 @@
+
 import csv
 import os
 from datetime import datetime
@@ -19,7 +20,8 @@ def create_journal():
     with open(
         JOURNAL_FILE,
         "w",
-        newline=""
+        newline="",
+        encoding="utf-8"
     ) as f:
 
         writer = csv.writer(f)
@@ -52,7 +54,8 @@ def save_trade(
     with open(
         JOURNAL_FILE,
         "a",
-        newline=""
+        newline="",
+        encoding="utf-8"
     ) as f:
 
         writer = csv.writer(f)
@@ -80,12 +83,14 @@ def get_stats():
     wins = 0
     losses = 0
     trades = 0
-
     total_pnl = 0
+
+    balance = START_BALANCE
 
     with open(
         JOURNAL_FILE,
-        "r"
+        "r",
+        encoding="utf-8"
     ) as f:
 
         reader = csv.DictReader(f)
@@ -100,12 +105,13 @@ def get_stats():
 
             total_pnl += pnl
 
+            balance *= (
+                1 + pnl / 100
+            )
+
             if pnl >= 0:
-
                 wins += 1
-
             else:
-
                 losses += 1
 
     winrate = 0
@@ -117,15 +123,12 @@ def get_stats():
             2
         )
 
-    balance = round(
-        START_BALANCE
-        * (1 + total_pnl / 100),
-        2
-    )
-
     return {
 
-        "balance": balance,
+        "balance": round(
+            balance,
+            2
+        ),
 
         "wins": wins,
 
