@@ -177,6 +177,45 @@ def calculate_atr_percent(
     )
 
 # ==========================================
+# ATR VALUE
+# ==========================================
+
+def calculate_atr(
+    df,
+    period=14
+):
+
+    high = df["high"]
+    low = df["low"]
+    close = df["close"]
+
+    tr1 = high - low
+
+    tr2 = (
+        high
+        - close.shift()
+    ).abs()
+
+    tr3 = (
+        low
+        - close.shift()
+    ).abs()
+
+    tr = pd.concat(
+        [tr1, tr2, tr3],
+        axis=1
+    ).max(axis=1)
+
+    atr = (
+        tr
+        .rolling(period)
+        .mean()
+        .iloc[-1]
+    )
+
+    return float(atr)
+
+# ==========================================
 # VOLUME
 # ==========================================
 
@@ -203,7 +242,7 @@ def volume_ratio(df):
     )
 
 # ==========================================
-# ENTRY SIGNAL 5M
+# ENTRY SIGNAL
 # ==========================================
 
 def get_entry_signal(df):
@@ -274,12 +313,31 @@ def build_signal(
     if trigger != trend:
         return None
 
-    entry = df5["close"].iloc[-1]
+    entry = float(
+        df5["close"].iloc[-1]
+    )
+
+    atr = calculate_atr(df15)
+
+    if trend == "LONG":
+
+        sl = (
+            entry
+            - atr * 1.5
+        )
+
+    else:
+
+        sl = (
+            entry
+            + atr * 1.5
+        )
 
     return {
         "symbol": symbol,
         "direction": trend,
         "entry": round(entry, 6),
+        "sl": round(sl, 6),
         "adx": round(adx, 2),
         "atr_percent": atr_percent,
         "volume_ratio": volume
