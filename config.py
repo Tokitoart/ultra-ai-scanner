@@ -28,9 +28,9 @@ MAX_ACTIVE_TRADES = 2
 # SCANNER
 # ==========================================
 
-SCAN_INTERVAL = 180
+SCAN_INTERVAL = 60
 
-TOP_SYMBOLS_LIMIT = 2
+TOP_SYMBOLS_LIMIT = 10
 
 # ==========================================
 # SYMBOLS
@@ -54,7 +54,7 @@ EMA_SLOW = 200
 
 ADX_PERIOD = 14
 
-MIN_ADX = 20
+MIN_ADX = 25
 
 # ==========================================
 # RSI FILTER
@@ -78,13 +78,13 @@ ATR_MULTIPLIER = 1.0
 # VOLUME FILTER
 # ==========================================
 
-MIN_VOLUME_RATIO = 1.3
+MIN_VOLUME_RATIO = 1.5
 
 # ==========================================
 # FLAT FILTER
 # ==========================================
 
-MIN_ATR_PERCENT = 0.2
+MIN_ATR_PERCENT = 0.3
 
 # ==========================================
 # TRAILING EXIT
