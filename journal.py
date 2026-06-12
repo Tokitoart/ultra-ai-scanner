@@ -32,7 +32,11 @@ def create_journal():
             "entry",
             "exit",
             "pnl",
-            "reason"
+            "reason",
+            "adx",
+            "atr_percent",
+            "volume_ratio",
+            "score"
         ])
 
 # ==========================================
@@ -45,7 +49,11 @@ def save_trade(
     entry,
     exit_price,
     pnl,
-    reason
+    reason,
+    adx=0,
+    atr_percent=0,
+    volume_ratio=0,
+    score=0
 ):
 
     create_journal()
@@ -68,7 +76,11 @@ def save_trade(
             entry,
             exit_price,
             round(pnl, 2),
-            reason
+            reason,
+            adx,
+            atr_percent,
+            volume_ratio,
+            score
         ])
 
 # ==========================================
