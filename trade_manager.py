@@ -1,3 +1,5 @@
+# trade_manager.py
+
 import time
 import json
 import os
@@ -153,9 +155,7 @@ def close_trade(
     trade = active_trades[symbol]
 
     save_trade(
-        trade["symbol"],
-        trade["direction"],
-        trade["entry"],
+        trade,
         exit_price,
         pnl,
         reason
@@ -178,7 +178,32 @@ def close_trade(
         "entry": trade["entry"],
         "exit": exit_price,
         "pnl": pnl,
-        "reason": reason
+        "reason": reason,
+
+        "adx": trade.get(
+            "adx",
+            0
+        ),
+
+        "atr_percent": trade.get(
+            "atr_percent",
+            0
+        ),
+
+        "volume_ratio": trade.get(
+            "volume_ratio",
+            0
+        ),
+
+        "score": trade.get(
+            "score",
+            0
+        ),
+
+        "highest_pnl": trade.get(
+            "highest_pnl",
+            0
+        )
     }
 
     del active_trades[symbol]
@@ -237,6 +262,9 @@ def move_to_breakeven(
 ):
 
     if current_pnl < BREAKEVEN_TRIGGER:
+        return trade
+
+    if "sl" not in trade:
         return trade
 
     if trade["direction"] == "LONG":
