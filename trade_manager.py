@@ -1,4 +1,6 @@
 import time
+import json
+import os
 
 from config import (
     START_BALANCE,
@@ -11,11 +13,81 @@ from config import (
 
 from journal import save_trade
 
+ACTIVE_TRADES_FILE = "active_trades.json"
+
 # ==========================================
 # ACTIVE TRADES
 # ==========================================
 
 active_trades = {}
+
+# ==========================================
+# LOAD ACTIVE TRADES
+# ==========================================
+
+def load_active_trades():
+
+    global active_trades
+
+    if not os.path.exists(
+        ACTIVE_TRADES_FILE
+    ):
+        active_trades = {}
+        return
+
+    try:
+
+        with open(
+            ACTIVE_TRADES_FILE,
+            "r"
+        ) as f:
+
+            active_trades = json.load(f)
+
+        print(
+            f"✅ LOADED {len(active_trades)} ACTIVE TRADES"
+        )
+
+    except Exception as e:
+
+        print(
+            "LOAD ACTIVE TRADES ERROR:",
+            e
+        )
+
+        active_trades = {}
+
+# ==========================================
+# SAVE ACTIVE TRADES
+# ==========================================
+
+def save_active_trades():
+
+    try:
+
+        with open(
+            ACTIVE_TRADES_FILE,
+            "w"
+        ) as f:
+
+            json.dump(
+                active_trades,
+                f,
+                indent=4
+            )
+
+    except Exception as e:
+
+        print(
+            "SAVE ACTIVE TRADES ERROR:",
+            e
+        )
+
+# ==========================================
+# INIT
+# ==========================================
+
+load_active_trades()
 
 # ==========================================
 # STATS
@@ -51,14 +123,18 @@ def open_trade(signal):
         )
 
         return
-    
+
     signal["open_time"] = time.time()
 
     signal["highest_pnl"] = 0
 
     active_trades[symbol] = signal
 
-    print(f"✅ OPEN TRADE: {symbol}")
+    save_active_trades()
+
+    print(
+        f"✅ OPEN TRADE: {symbol}"
+    )
 
 # ==========================================
 # CLOSE TRADE
@@ -106,6 +182,8 @@ def close_trade(
     }
 
     del active_trades[symbol]
+
+    save_active_trades()
 
     print(
         f"🏁 CLOSE {symbol} | "
@@ -173,6 +251,8 @@ def move_to_breakeven(
 
             trade["sl"] = trade["entry"]
 
+    save_active_trades()
+
     return trade
 
 # ==========================================
@@ -187,6 +267,8 @@ def update_highest_pnl(
     if pnl > trade["highest_pnl"]:
 
         trade["highest_pnl"] = pnl
+
+        save_active_trades()
 
 # ==========================================
 # TRAILING EXIT
