@@ -29,14 +29,20 @@ def create_journal():
             "time",
             "symbol",
             "direction",
+
             "entry",
             "exit",
-            "pnl",
-            "reason",
+
             "adx",
             "atr_percent",
             "volume_ratio",
-            "score"
+            "score",
+
+            "highest_pnl",
+            "duration_hours",
+
+            "pnl",
+            "reason"
         ])
 
 # ==========================================
@@ -44,19 +50,21 @@ def create_journal():
 # ==========================================
 
 def save_trade(
-    symbol,
-    direction,
-    entry,
+    trade,
     exit_price,
     pnl,
-    reason,
-    adx=0,
-    atr_percent=0,
-    volume_ratio=0,
-    score=0
+    reason
 ):
 
     create_journal()
+
+    duration_hours = round(
+        (
+            datetime.now().timestamp()
+            - trade["open_time"]
+        ) / 3600,
+        2
+    )
 
     with open(
         JOURNAL_FILE,
@@ -68,19 +76,34 @@ def save_trade(
         writer = csv.writer(f)
 
         writer.writerow([
+
             datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             ),
-            symbol,
-            direction,
-            entry,
+
+            trade["symbol"],
+            trade["direction"],
+
+            trade["entry"],
             exit_price,
+
+            trade.get("adx", 0),
+            trade.get("atr_percent", 0),
+            trade.get("volume_ratio", 0),
+            trade.get("score", 0),
+
+            round(
+                trade.get(
+                    "highest_pnl",
+                    0
+                ),
+                2
+            ),
+
+            duration_hours,
+
             round(pnl, 2),
-            reason,
-            adx,
-            atr_percent,
-            volume_ratio,
-            score
+            reason
         ])
 
 # ==========================================
@@ -121,8 +144,11 @@ def get_stats():
             )
 
             if pnl >= 0:
+
                 wins += 1
+
             else:
+
                 losses += 1
 
     winrate = 0
