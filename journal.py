@@ -8,7 +8,7 @@ from config import (
 )
 
 # ==========================================
-# CREATE FILE
+# CREATE JOURNAL
 # ==========================================
 
 def create_journal():
@@ -26,24 +26,35 @@ def create_journal():
         writer = csv.writer(f)
 
         writer.writerow([
+
             "time",
+
             "symbol",
+
             "direction",
 
             "entry",
+
             "exit",
 
+            "pnl",
+
+            "reason",
+
             "adx",
+
             "atr_percent",
+
             "volume_ratio",
+
             "score",
 
             "highest_pnl",
-            "duration_hours",
 
-            "pnl",
-            "reason"
+            "duration_minutes"
+
         ])
+
 
 # ==========================================
 # SAVE TRADE
@@ -58,13 +69,26 @@ def save_trade(
 
     create_journal()
 
-    duration_hours = round(
-        (
-            datetime.now().timestamp()
-            - trade["open_time"]
-        ) / 3600,
-        2
+    open_time = trade.get(
+        "open_time",
+        0
     )
+
+    duration = 0
+
+    if open_time:
+
+        duration = round(
+            (
+                datetime.now().timestamp()
+                -
+                open_time
+            )
+            /
+            60,
+            2
+        )
+
 
     with open(
         JOURNAL_FILE,
@@ -75,36 +99,72 @@ def save_trade(
 
         writer = csv.writer(f)
 
+
         writer.writerow([
 
             datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             ),
 
-            trade["symbol"],
-            trade["direction"],
+            trade.get(
+                "symbol",
+                ""
+            ),
 
-            trade["entry"],
+            trade.get(
+                "direction",
+                ""
+            ),
+
+            trade.get(
+                "entry",
+                0
+            ),
+
             exit_price,
 
-            trade.get("adx", 0),
-            trade.get("atr_percent", 0),
-            trade.get("volume_ratio", 0),
-            trade.get("score", 0),
-
             round(
-                trade.get(
-                    "highest_pnl",
-                    0
-                ),
+                pnl,
                 2
             ),
 
-            duration_hours,
+            reason,
 
-            round(pnl, 2),
-            reason
+
+            trade.get(
+                "adx",
+                0
+            ),
+
+
+            trade.get(
+                "atr_percent",
+                0
+            ),
+
+
+            trade.get(
+                "volume_ratio",
+                0
+            ),
+
+
+            trade.get(
+                "score",
+                0
+            ),
+
+
+            trade.get(
+                "highest_pnl",
+                0
+            ),
+
+
+            duration
+
         ])
+
 
 # ==========================================
 # LOAD STATS
@@ -115,11 +175,16 @@ def get_stats():
     create_journal()
 
     wins = 0
+
     losses = 0
+
     trades = 0
+
     total_pnl = 0
 
+
     balance = START_BALANCE
+
 
     with open(
         JOURNAL_FILE,
@@ -127,21 +192,28 @@ def get_stats():
         encoding="utf-8"
     ) as f:
 
+
         reader = csv.DictReader(f)
+
 
         for row in reader:
 
+
             trades += 1
+
 
             pnl = float(
                 row["pnl"]
             )
 
+
             total_pnl += pnl
+
 
             balance *= (
                 1 + pnl / 100
             )
+
 
             if pnl >= 0:
 
@@ -151,7 +223,10 @@ def get_stats():
 
                 losses += 1
 
+
+
     winrate = 0
+
 
     if trades > 0:
 
@@ -160,26 +235,35 @@ def get_stats():
             2
         )
 
+
     return {
+
 
         "balance": round(
             balance,
             2
         ),
 
+
         "wins": wins,
+
 
         "losses": losses,
 
+
         "total_trades": trades,
 
+
         "winrate": winrate,
+
 
         "total_pnl": round(
             total_pnl,
             2
         )
+
     }
+
 
 # ==========================================
 # PRINT STATS
@@ -189,29 +273,45 @@ def print_stats():
 
     stats = get_stats()
 
-    print("\n==========================")
-    print("📊 TRADING STATS")
-    print("==========================")
+
+    print()
+
+    print(
+        "=========================="
+    )
+
+    print(
+        "📊 TRADING STATS"
+    )
+
+    print(
+        "=========================="
+    )
+
 
     print(
         "Balance:",
         stats["balance"]
     )
 
+
     print(
         "Trades:",
         stats["total_trades"]
     )
+
 
     print(
         "Wins:",
         stats["wins"]
     )
 
+
     print(
         "Losses:",
         stats["losses"]
     )
+
 
     print(
         "Winrate:",
@@ -219,10 +319,16 @@ def print_stats():
         "%"
     )
 
+
     print(
         "Total PnL:",
         stats["total_pnl"],
         "%"
     )
 
-    print("==========================\n")
+
+    print(
+        "=========================="
+    )
+
+    print()
