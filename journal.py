@@ -7,8 +7,9 @@ from config import (
     START_BALANCE
 )
 
+
 # ==========================================
-# CREATE JOURNAL
+# CREATE FILE
 # ==========================================
 
 def create_journal():
@@ -27,31 +28,29 @@ def create_journal():
 
         writer.writerow([
 
-            "time",
+            "close_time",
 
             "symbol",
-
             "direction",
 
             "entry",
-
             "exit",
 
             "pnl",
-
             "reason",
 
             "adx",
-
             "atr_percent",
-
             "volume_ratio",
-
             "score",
 
             "highest_pnl",
 
-            "duration_minutes"
+            "open_time",
+
+            "duration_minutes",
+
+            "sl"
 
         ])
 
@@ -69,25 +68,34 @@ def save_trade(
 
     create_journal()
 
-    open_time = trade.get(
+
+    close_time = datetime.now()
+
+
+    open_timestamp = trade.get(
         "open_time",
         0
     )
 
-    duration = 0
 
-    if open_time:
+    if open_timestamp:
 
-        duration = round(
-            (
-                datetime.now().timestamp()
-                -
-                open_time
-            )
-            /
-            60,
-            2
+        open_time = datetime.fromtimestamp(
+            open_timestamp
         )
+
+        duration = int(
+            (
+                close_time
+                - open_time
+            ).total_seconds()
+            / 60
+        )
+
+    else:
+
+        open_time = close_time
+        duration = 0
 
 
     with open(
@@ -102,31 +110,37 @@ def save_trade(
 
         writer.writerow([
 
-            datetime.now().strftime(
+            close_time.strftime(
                 "%Y-%m-%d %H:%M:%S"
             ),
+
 
             trade.get(
                 "symbol",
                 ""
             ),
 
+
             trade.get(
                 "direction",
                 ""
             ),
+
 
             trade.get(
                 "entry",
                 0
             ),
 
+
             exit_price,
+
 
             round(
                 pnl,
                 2
             ),
+
 
             reason,
 
@@ -161,9 +175,21 @@ def save_trade(
             ),
 
 
-            duration
+            open_time.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+
+
+            duration,
+
+
+            trade.get(
+                "sl",
+                0
+            )
 
         ])
+
 
 
 # ==========================================
@@ -174,8 +200,8 @@ def get_stats():
 
     create_journal()
 
-    wins = 0
 
+    wins = 0
     losses = 0
 
     trades = 0
@@ -265,6 +291,7 @@ def get_stats():
     }
 
 
+
 # ==========================================
 # PRINT STATS
 # ==========================================
@@ -274,10 +301,8 @@ def print_stats():
     stats = get_stats()
 
 
-    print()
-
     print(
-        "=========================="
+        "\n=========================="
     )
 
     print(
@@ -328,7 +353,5 @@ def print_stats():
 
 
     print(
-        "=========================="
+        "==========================\n"
     )
-
-    print()
