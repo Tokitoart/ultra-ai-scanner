@@ -1,59 +1,50 @@
-import csv
 import os
+import psycopg2
 from datetime import datetime
 
-from config import (
-    JOURNAL_FILE,
-    START_BALANCE
-)
-
+from config import START_BALANCE
 
 # ==========================================
-# CREATE FILE
+# DATABASE
 # ==========================================
 
-def create_journal():
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-    if os.path.exists(JOURNAL_FILE):
-        return
+# ==========================================
+# CONNECT
+# ==========================================
 
-    with open(
-        JOURNAL_FILE,
-        "w",
-        newline="",
-        encoding="utf-8"
-    ) as f:
+def get_conn():
+    return psycopg2.connect(DATABASE_URL)
 
-        writer = csv.writer(f)
+# ==========================================
+# INIT TABLE
+# ==========================================
 
-        writer.writerow([
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
 
-            "close_time",
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS trades (
+            id SERIAL PRIMARY KEY,
+            time TIMESTAMP,
+            symbol TEXT,
+            direction TEXT,
+            entry DOUBLE PRECISION,
+            exit DOUBLE PRECISION,
+            pnl DOUBLE PRECISION,
+            reason TEXT,
+            adx DOUBLE PRECISION,
+            atr_percent DOUBLE PRECISION,
+            volume_ratio DOUBLE PRECISION,
+            score DOUBLE PRECISION
+        )
+    """)
 
-            "symbol",
-            "direction",
-
-            "entry",
-            "exit",
-
-            "pnl",
-            "reason",
-
-            "adx",
-            "atr_percent",
-            "volume_ratio",
-            "score",
-
-            "highest_pnl",
-
-            "open_time",
-
-            "duration_minutes",
-
-            "sl"
-
-        ])
-
+    conn.commit()
+    cur.close()
+    conn.close()
 
 # ==========================================
 # SAVE TRADE
@@ -66,131 +57,43 @@ def save_trade(
     reason
 ):
 
-    create_journal()
+    init_db()
 
+    conn = get_conn()
+    cur = conn.cursor()
 
-    close_time = datetime.now()
-
-
-    open_timestamp = trade.get(
-        "open_time",
-        0
-    )
-
-
-    if open_timestamp:
-
-        open_time = datetime.fromtimestamp(
-            open_timestamp
-        )
-
-        duration = int(
-            (
-                close_time
-                - open_time
-            ).total_seconds()
-            / 60
-        )
-
-    else:
-
-        open_time = close_time
-        duration = 0
-
-
-    with open(
-        JOURNAL_FILE,
-        "a",
-        newline="",
-        encoding="utf-8"
-    ) as f:
-
-        writer = csv.writer(f)
-
-
-        writer.writerow([
-
-            close_time.strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-
-
-            trade.get(
-                "symbol",
-                ""
-            ),
-
-
-            trade.get(
-                "direction",
-                ""
-            ),
-
-
-            trade.get(
-                "entry",
-                0
-            ),
-
-
-            exit_price,
-
-
-            round(
-                pnl,
-                2
-            ),
-
-
+    cur.execute("""
+        INSERT INTO trades (
+            time,
+            symbol,
+            direction,
+            entry,
+            exit,
+            pnl,
             reason,
+            adx,
+            atr_percent,
+            volume_ratio,
+            score
+        )
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    """, (
+        datetime.now(),
+        trade["symbol"],
+        trade["direction"],
+        trade["entry"],
+        exit_price,
+        pnl,
+        reason,
+        trade.get("adx", 0),
+        trade.get("atr_percent", 0),
+        trade.get("volume_ratio", 0),
+        trade.get("score", 0)
+    ))
 
-
-            trade.get(
-                "adx",
-                0
-            ),
-
-
-            trade.get(
-                "atr_percent",
-                0
-            ),
-
-
-            trade.get(
-                "volume_ratio",
-                0
-            ),
-
-
-            trade.get(
-                "score",
-                0
-            ),
-
-
-            trade.get(
-                "highest_pnl",
-                0
-            ),
-
-
-            open_time.strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-
-
-            duration,
-
-
-            trade.get(
-                "sl",
-                0
-            )
-
-        ])
-
-
+    conn.commit()
+    cur.close()
+    conn.close()
 
 # ==========================================
 # LOAD STATS
@@ -198,99 +101,44 @@ def save_trade(
 
 def get_stats():
 
-    create_journal()
+    conn = get_conn()
+    cur = conn.cursor()
 
+    cur.execute("SELECT pnl FROM trades")
+
+    rows = cur.fetchall()
 
     wins = 0
     losses = 0
-
-    trades = 0
-
-    total_pnl = 0
-
-
+    total = 0
     balance = START_BALANCE
 
+    for r in rows:
 
-    with open(
-        JOURNAL_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
+        pnl = float(r[0])
+        total += 1
+        balance *= (1 + pnl / 100)
 
-
-        reader = csv.DictReader(f)
-
-
-        for row in reader:
-
-
-            trades += 1
-
-
-            pnl = float(
-                row["pnl"]
-            )
-
-
-            total_pnl += pnl
-
-
-            balance *= (
-                1 + pnl / 100
-            )
-
-
-            if pnl >= 0:
-
-                wins += 1
-
-            else:
-
-                losses += 1
-
-
+        if pnl >= 0:
+            wins += 1
+        else:
+            losses += 1
 
     winrate = 0
 
+    if total > 0:
+        winrate = round(wins / total * 100, 2)
 
-    if trades > 0:
-
-        winrate = round(
-            wins / trades * 100,
-            2
-        )
-
+    cur.close()
+    conn.close()
 
     return {
-
-
-        "balance": round(
-            balance,
-            2
-        ),
-
-
+        "balance": round(balance, 2),
         "wins": wins,
-
-
         "losses": losses,
-
-
-        "total_trades": trades,
-
-
-        "winrate": winrate,
-
-
-        "total_pnl": round(
-            total_pnl,
-            2
-        )
-
+        "total_trades": total,
+        "winrate": winrate
     }
-
-
 
 # ==========================================
 # PRINT STATS
@@ -300,58 +148,14 @@ def print_stats():
 
     stats = get_stats()
 
+    print("\n==========================")
+    print("📊 TRADING STATS (POSTGRES)")
+    print("==========================")
 
-    print(
-        "\n=========================="
-    )
+    print("Balance:", stats["balance"])
+    print("Trades:", stats["total_trades"])
+    print("Wins:", stats["wins"])
+    print("Losses:", stats["losses"])
+    print("Winrate:", stats["winrate"], "%")
 
-    print(
-        "📊 TRADING STATS"
-    )
-
-    print(
-        "=========================="
-    )
-
-
-    print(
-        "Balance:",
-        stats["balance"]
-    )
-
-
-    print(
-        "Trades:",
-        stats["total_trades"]
-    )
-
-
-    print(
-        "Wins:",
-        stats["wins"]
-    )
-
-
-    print(
-        "Losses:",
-        stats["losses"]
-    )
-
-
-    print(
-        "Winrate:",
-        stats["winrate"],
-        "%"
-    )
-
-
-    print(
-        "Total PnL:",
-        stats["total_pnl"],
-        "%"
-    )
-
-
-    print(
-        "==========================\n"
-    )
+    print("==========================\n")
