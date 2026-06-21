@@ -2,11 +2,11 @@ import time
 
 from config import (
     SCAN_INTERVAL,
-    COOLDOWN_HOURS
+    COOLDOWN_HOURS,
+    TRADING_SYMBOLS
 )
 
 from data_provider import (
-    get_top_symbols,
     get_klines,
     get_price,
     valid_df,
@@ -46,59 +46,29 @@ def get_signal(symbol):
 
     try:
 
-        df4h = get_klines(
-            symbol,
-            "240",
-            300
-        )
-
-        df1h = get_klines(
-            symbol,
-            "60",
-            300
-        )
-
-        df15 = get_klines(
-            symbol,
-            "15",
-            300
-        )
-
-        df5 = get_klines(
-            symbol,
-            "5",
-            300
-        )
+        df4h = get_klines(symbol, "240", 300)
+        df1h = get_klines(symbol, "60", 300)
+        df15 = get_klines(symbol, "15", 300)
+        df5 = get_klines(symbol, "5", 300)
 
         if not valid_df(df4h):
             return None
-
         if not valid_df(df1h):
             return None
-
         if not valid_df(df15):
             return None
-
         if not valid_df(df5):
             return None
 
-        signal = build_signal(
-            symbol,
-            df4h,
-            df1h,
-            df15,
-            df5
-        )
+        signal = build_signal(symbol, df4h, df1h, df15, df5)
 
         if not signal:
             return None
 
         signal["score"] = round(
-            (
-                signal["adx"]
-                + signal["volume_ratio"] * 10
-                + signal["atr_percent"] * 5
-            ),
+            signal["adx"]
+            + signal["volume_ratio"] * 10
+            + signal["atr_percent"] * 5,
             2
         )
 
@@ -111,13 +81,9 @@ def get_signal(symbol):
         return signal
 
     except Exception as e:
-
-        print(
-            f"SIGNAL ERROR {symbol}:",
-            e
-        )
-
+        print(f"SIGNAL ERROR {symbol}:", e)
         return None
+
 
 # ==========================================
 # MONITOR TRADES
@@ -126,7 +92,6 @@ def get_signal(symbol):
 def monitor_trades():
 
     active = get_active_trades()
-
     closed_symbols = []
 
     for symbol, trade in list(active.items()):
@@ -140,14 +105,7 @@ def monitor_trades():
 
             if trade["direction"] == "LONG":
 
-                pnl = (
-                    (
-                        price
-                        - trade["entry"]
-                    )
-                    /
-                    trade["entry"]
-                ) * 100
+                pnl = ((price - trade["entry"]) / trade["entry"]) * 100
 
                 if price <= trade["sl"]:
 
@@ -158,29 +116,13 @@ def monitor_trades():
                         "reason": "STOP LOSS"
                     })
 
-                    close_trade(
-                        symbol,
-                        price,
-                        pnl,
-                        "STOP LOSS"
-                    )
-
-                    closed_symbols.append(
-                        symbol
-                    )
-
+                    close_trade(symbol, price, pnl, "STOP LOSS")
+                    closed_symbols.append(symbol)
                     continue
 
             else:
 
-                pnl = (
-                    (
-                        trade["entry"]
-                        - price
-                    )
-                    /
-                    trade["entry"]
-                ) * 100
+                pnl = ((trade["entry"] - price) / trade["entry"]) * 100
 
                 if price >= trade["sl"]:
 
@@ -191,33 +133,14 @@ def monitor_trades():
                         "reason": "STOP LOSS"
                     })
 
-                    close_trade(
-                        symbol,
-                        price,
-                        pnl,
-                        "STOP LOSS"
-                    )
-
-                    closed_symbols.append(
-                        symbol
-                    )
-
+                    close_trade(symbol, price, pnl, "STOP LOSS")
+                    closed_symbols.append(symbol)
                     continue
 
-            update_highest_pnl(
-                trade,
-                pnl
-            )
+            update_highest_pnl(trade, pnl)
+            move_to_breakeven(trade, pnl)
 
-            move_to_breakeven(
-                trade,
-                pnl
-            )
-
-            if should_trailing_exit(
-                trade,
-                pnl
-            ):
+            if should_trailing_exit(trade, pnl):
 
                 send_close_trade({
                     "symbol": symbol,
@@ -226,17 +149,8 @@ def monitor_trades():
                     "reason": "TRAILING EXIT"
                 })
 
-                close_trade(
-                    symbol,
-                    price,
-                    pnl,
-                    "TRAILING EXIT"
-                )
-
-                closed_symbols.append(
-                    symbol
-                )
-
+                close_trade(symbol, price, pnl, "TRAILING EXIT")
+                closed_symbols.append(symbol)
                 continue
 
             if trade_expired(trade):
@@ -248,25 +162,14 @@ def monitor_trades():
                     "reason": "TIME EXIT"
                 })
 
-                close_trade(
-                    symbol,
-                    price,
-                    pnl,
-                    "TIME EXIT"
-                )
-
-                closed_symbols.append(
-                    symbol
-                )
+                close_trade(symbol, price, pnl, "TIME EXIT")
+                closed_symbols.append(symbol)
 
         except Exception as e:
-
-            print(
-                f"MONITOR ERROR {symbol}:",
-                e
-            )
+            print(f"MONITOR ERROR {symbol}:", e)
 
     return closed_symbols
+
 
 # ==========================================
 # SCAN MARKET
@@ -277,11 +180,9 @@ def scan_market():
     if not can_open_trade():
         return
 
-    symbols = get_top_symbols()
+    symbols = TRADING_SYMBOLS
 
-    print(
-        f"SYMBOLS FOUND: {len(symbols)}"
-    )
+    print(f"SYMBOLS FOUND: {len(symbols)}")
 
     best_signal = None
 
@@ -291,17 +192,12 @@ def scan_market():
 
         if symbol in active:
             continue
-        
+
         if symbol in cooldown_symbols:
 
-            elapsed = (
-                time.time()
-                - cooldown_symbols[symbol]
-            )
+            elapsed = time.time() - cooldown_symbols[symbol]
 
-            if elapsed < (
-                COOLDOWN_HOURS * 3600
-            ):
+            if elapsed < COOLDOWN_HOURS * 3600:
                 continue
 
         signal = get_signal(symbol)
@@ -310,27 +206,17 @@ def scan_market():
             continue
 
         if best_signal is None:
-
             best_signal = signal
 
-        elif (
-            signal["score"]
-            >
-            best_signal["score"]
-        ):
-
+        elif signal["score"] > best_signal["score"]:
             best_signal = signal
 
     if not best_signal:
         return
 
-    open_trade(
-        best_signal
-    )
+    open_trade(best_signal)
+    send_signal(best_signal)
 
-    send_signal(
-        best_signal
-    )
 
 # ==========================================
 # MAIN LOOP
@@ -338,23 +224,12 @@ def scan_market():
 
 def main():
 
-    print(
-        "===================================="
-    )
-
-    print(
-        "ULTRA SCANNER STARTED"
-    )
-
-    print(
-        "===================================="
-    )
+    print("====================================")
+    print("ULTRA SCANNER STARTED")
+    print("====================================")
 
     if not exchange_alive():
-
-        print(
-            "WARNING: BINANCE OFFLINE"
-        )
+        print("WARNING: EXCHANGE OFFLINE")
 
     send_startup()
 
@@ -365,38 +240,24 @@ def main():
             closed = monitor_trades()
 
             for symbol in closed:
-
-                cooldown_symbols[
-                    symbol
-                ] = time.time()
+                cooldown_symbols[symbol] = time.time()
 
             scan_market()
 
-            active_count = len(
-                get_active_trades()
-            )
+            active_count = len(get_active_trades())
+            print(f"ACTIVE TRADES: {active_count}")
 
-            print(
-                f"ACTIVE TRADES: {active_count}"
-            )
-
-            time.sleep(
-                SCAN_INTERVAL
-            )
+            time.sleep(SCAN_INTERVAL)
 
         except Exception as e:
 
-            print(
-                "MAIN LOOP ERROR:",
-                e
-            )
-
+            print("MAIN LOOP ERROR:", e)
             time.sleep(30)
+
 
 # ==========================================
 # RUN
 # ==========================================
 
 if __name__ == "__main__":
-
     main()
