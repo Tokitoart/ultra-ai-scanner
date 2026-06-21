@@ -1,7 +1,6 @@
 import time
-import os
 import json
-import psycopg2
+import os
 
 from config import (
     START_BALANCE,
@@ -15,43 +14,7 @@ from config import (
 from journal import save_trade
 
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-
-# ==========================================
-# DATABASE
-# ==========================================
-
-def get_conn():
-
-    return psycopg2.connect(
-        DATABASE_URL
-    )
-
-
-# ==========================================
-# INIT TABLE
-# ==========================================
-
-def init_active_table():
-
-    conn = get_conn()
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS active_trades (
-
-            symbol TEXT PRIMARY KEY,
-
-            data JSONB
-
-        )
-    """)
-
-    conn.commit()
-
-    cur.close()
-    conn.close()
+ACTIVE_TRADES_FILE = "active_trades.json"
 
 
 # ==========================================
@@ -69,35 +32,39 @@ def load_active_trades():
 
     global active_trades
 
-    init_active_table()
+    if not os.path.exists(
+        ACTIVE_TRADES_FILE
+    ):
 
-    conn = get_conn()
-    cur = conn.cursor()
-
-    cur.execute(
-        """
-        SELECT symbol, data
-        FROM active_trades
-        """
-    )
-
-    rows = cur.fetchall()
+        active_trades = {}
+        return
 
 
-    active_trades = {}
+    try:
 
-    for row in rows:
+        with open(
+            ACTIVE_TRADES_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
 
-        active_trades[row[0]] = row[1]
+            active_trades = json.load(f)
 
 
-    cur.close()
-    conn.close()
+        print(
+            f"✅ LOADED {len(active_trades)} ACTIVE TRADES"
+        )
 
 
-    print(
-        f"✅ LOADED {len(active_trades)} ACTIVE TRADES"
-    )
+    except Exception as e:
+
+        print(
+            "LOAD ACTIVE TRADES ERROR:",
+            e
+        )
+
+        active_trades = {}
+
 
 
 # ==========================================
@@ -106,62 +73,27 @@ def load_active_trades():
 
 def save_active_trades():
 
-    conn = get_conn()
-    cur = conn.cursor()
+    try:
 
+        with open(
+            ACTIVE_TRADES_FILE,
+            "w",
+            encoding="utf-8"
+        ) as f:
 
-    for symbol, data in active_trades.items():
-
-        cur.execute(
-            """
-            INSERT INTO active_trades
-            (symbol,data)
-
-            VALUES(%s,%s)
-
-            ON CONFLICT(symbol)
-
-            DO UPDATE SET data=%s
-
-            """,
-            (
-                symbol,
-                json.dumps(data),
-                json.dumps(data)
+            json.dump(
+                active_trades,
+                f,
+                indent=4
             )
+
+
+    except Exception as e:
+
+        print(
+            "SAVE ACTIVE TRADES ERROR:",
+            e
         )
-
-
-    conn.commit()
-
-    cur.close()
-    conn.close()
-
-
-
-# ==========================================
-# DELETE ACTIVE
-# ==========================================
-
-def delete_active_trade(symbol):
-
-    conn = get_conn()
-    cur = conn.cursor()
-
-
-    cur.execute(
-        """
-        DELETE FROM active_trades
-        WHERE symbol=%s
-        """,
-        (symbol,)
-    )
-
-
-    conn.commit()
-
-    cur.close()
-    conn.close()
 
 
 
@@ -180,8 +112,11 @@ load_active_trades()
 stats = {
 
     "balance": START_BALANCE,
+
     "wins": 0,
+
     "losses": 0,
+
     "total_trades": 0
 
 }
@@ -189,7 +124,7 @@ stats = {
 
 
 # ==========================================
-# CAN OPEN
+# CAN OPEN TRADE
 # ==========================================
 
 def can_open_trade():
@@ -214,15 +149,42 @@ def open_trade(signal):
     if symbol in active_trades:
 
         print(
-            f"SKIP DUPLICATE TRADE {symbol}"
+            f"SKIP DUPLICATE TRADE: {symbol}"
         )
 
         return
 
 
-    signal["open_time"] = time.time()
 
-    signal["highest_pnl"] = 0
+    signal.setdefault(
+        "score",
+        0
+    )
+
+    signal.setdefault(
+        "adx",
+        0
+    )
+
+    signal.setdefault(
+        "atr_percent",
+        0
+    )
+
+    signal.setdefault(
+        "volume_ratio",
+        0
+    )
+
+    signal.setdefault(
+        "highest_pnl",
+        0
+    )
+
+    signal.setdefault(
+        "open_time",
+        time.time()
+    )
 
 
     active_trades[symbol] = signal
@@ -242,10 +204,10 @@ def open_trade(signal):
 # ==========================================
 
 def close_trade(
-        symbol,
-        exit_price,
-        pnl,
-        reason
+    symbol,
+    exit_price,
+    pnl,
+    reason
 ):
 
 
@@ -254,7 +216,9 @@ def close_trade(
         return None
 
 
+
     trade = active_trades[symbol]
+
 
 
     save_trade(
@@ -265,7 +229,9 @@ def close_trade(
     )
 
 
+
     stats["total_trades"] += 1
+
 
 
     if pnl >= 0:
@@ -283,19 +249,52 @@ def close_trade(
     )
 
 
-    result = {
 
-        "symbol": symbol,
+    closed_trade = {
 
-        "direction": trade["direction"],
+        "symbol": trade.get(
+            "symbol"
+        ),
 
-        "entry": trade["entry"],
+        "direction": trade.get(
+            "direction"
+        ),
+
+        "entry": trade.get(
+            "entry"
+        ),
 
         "exit": exit_price,
 
         "pnl": pnl,
 
-        "reason": reason
+        "reason": reason,
+
+
+        "adx": trade.get(
+            "adx",
+            0
+        ),
+
+        "atr_percent": trade.get(
+            "atr_percent",
+            0
+        ),
+
+        "volume_ratio": trade.get(
+            "volume_ratio",
+            0
+        ),
+
+        "score": trade.get(
+            "score",
+            0
+        ),
+
+        "highest_pnl": trade.get(
+            "highest_pnl",
+            0
+        )
 
     }
 
@@ -304,16 +303,72 @@ def close_trade(
     del active_trades[symbol]
 
 
-    delete_active_trade(symbol)
+    save_active_trades()
+
 
 
     print(
-        f"🏁 CLOSE {symbol} {round(pnl,2)}% {reason}"
+        f"🏁 CLOSE {symbol} "
+        f"{round(pnl,2)}% "
+        f"{reason}"
     )
 
 
-    return result
+    return closed_trade
 
+
+
+
+# ==========================================
+# WINRATE
+# ==========================================
+
+def get_winrate():
+
+    trades = stats["total_trades"]
+
+
+    if trades == 0:
+
+        return 0
+
+
+
+    return round(
+        stats["wins"]
+        /
+        trades
+        *
+        100,
+        2
+    )
+
+
+
+# ==========================================
+# GET STATS
+# ==========================================
+
+def get_stats():
+
+    return {
+
+        "balance": round(
+            stats["balance"],
+            2
+        ),
+
+        "wins": stats["wins"],
+
+        "losses": stats["losses"],
+
+        "total_trades":
+            stats["total_trades"],
+
+        "winrate":
+            get_winrate()
+
+    }
 
 
 
@@ -322,14 +377,15 @@ def close_trade(
 # ==========================================
 
 def move_to_breakeven(
-        trade,
-        current_pnl
+    trade,
+    current_pnl
 ):
 
 
     if current_pnl < BREAKEVEN_TRIGGER:
 
         return trade
+
 
 
     if "sl" not in trade:
@@ -363,13 +419,14 @@ def move_to_breakeven(
 
 
 
+
 # ==========================================
-# HIGHEST PNL
+# TRACK HIGHEST PNL
 # ==========================================
 
 def update_highest_pnl(
-        trade,
-        pnl
+    trade,
+    pnl
 ):
 
 
@@ -381,17 +438,19 @@ def update_highest_pnl(
 
         trade["highest_pnl"] = pnl
 
+
         save_active_trades()
 
 
 
+
 # ==========================================
-# TRAILING
+# TRAILING EXIT
 # ==========================================
 
 def should_trailing_exit(
-        trade,
-        pnl
+    trade,
+    pnl
 ):
 
 
@@ -406,36 +465,60 @@ def should_trailing_exit(
         return False
 
 
-    return (
-        highest - pnl
-        >= TRAILING_GIVEBACK
+
+    drawdown = (
+        highest
+        -
+        pnl
     )
 
 
 
+    if drawdown >= TRAILING_GIVEBACK:
+
+        return True
+
+
+
+    return False
+
+
+
+
 # ==========================================
-# TIME EXIT
+# TRADE EXPIRED
 # ==========================================
 
 def trade_expired(trade):
 
 
     elapsed = (
+
         time.time()
+
         -
-        trade["open_time"]
+
+        trade.get(
+            "open_time",
+            time.time()
+        )
+
     )
+
+
+    hours = elapsed / 3600
+
 
 
     return (
-        elapsed / 3600
-        >= MAX_TRADE_HOURS
+        hours >= MAX_TRADE_HOURS
     )
+
 
 
 
 # ==========================================
-# GET ACTIVE
+# GET ACTIVE TRADES
 # ==========================================
 
 def get_active_trades():
