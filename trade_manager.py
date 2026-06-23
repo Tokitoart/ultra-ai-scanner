@@ -1,8 +1,4 @@
-# trade_manager.py
-
 import time
-import json
-import os
 
 from config import (
     START_BALANCE,
@@ -17,8 +13,11 @@ from config import (
 
 from journal import save_trade
 
-
-ACTIVE_TRADES_FILE = "active_trades.json"
+from database import (
+    init_database,
+    load_trades,
+    save_trades
+)
 
 
 # ==========================================
@@ -28,86 +27,25 @@ ACTIVE_TRADES_FILE = "active_trades.json"
 active_trades = {}
 
 
-
 # ==========================================
-# LOAD ACTIVE TRADES
+# INIT DATABASE
 # ==========================================
 
-def load_active_trades():
+init_database()
 
-    global active_trades
-
-
-    if not os.path.exists(
-        ACTIVE_TRADES_FILE
-    ):
-
-        active_trades = {}
-        return
-
-
-    try:
-
-        with open(
-            ACTIVE_TRADES_FILE,
-            "r",
-            encoding="utf-8"
-        ) as f:
-
-            active_trades = json.load(f)
-
-
-        print(
-            f"✅ LOADED {len(active_trades)} ACTIVE TRADES"
-        )
-
-
-    except Exception as e:
-
-        print(
-            "LOAD ACTIVE TRADES ERROR:",
-            e
-        )
-
-        active_trades = {}
+active_trades = load_trades()
 
 
 
 # ==========================================
-# SAVE ACTIVE TRADES
+# SAVE DATABASE
 # ==========================================
 
 def save_active_trades():
 
-    try:
-
-        with open(
-            ACTIVE_TRADES_FILE,
-            "w",
-            encoding="utf-8"
-        ) as f:
-
-            json.dump(
-                active_trades,
-                f,
-                indent=4
-            )
-
-
-    except Exception as e:
-
-        print(
-            "SAVE ACTIVE TRADES ERROR:",
-            e
-        )
-
-
-
-# ==========================================
-# INIT
-# ==========================================
-
-load_active_trades()
+    save_trades(
+        active_trades
+    )
 
 
 
@@ -124,6 +62,7 @@ stats = {
     "losses": 0,
 
     "total_trades": 0
+
 }
 
 
@@ -163,21 +102,6 @@ def open_trade(signal):
 
     signal.setdefault(
         "score",
-        0
-    )
-
-    signal.setdefault(
-        "adx",
-        0
-    )
-
-    signal.setdefault(
-        "atr_percent",
-        0
-    )
-
-    signal.setdefault(
-        "volume_ratio",
         0
     )
 
@@ -225,6 +149,7 @@ def close_trade(
         return None
 
 
+
     trade = active_trades[symbol]
 
 
@@ -252,6 +177,7 @@ def close_trade(
     stats["balance"] *= (
         1 + pnl / 100
     )
+
 
 
     closed_trade = {
@@ -347,7 +273,7 @@ def get_winrate():
 
 
 # ==========================================
-# GET STATS
+# STATS
 # ==========================================
 
 def get_stats():
@@ -374,14 +300,13 @@ def get_stats():
 
 
 # ==========================================
-# MOVE STOP BREAKEVEN
+# BREAKEVEN
 # ==========================================
 
 def move_to_breakeven(
     trade,
     current_pnl
 ):
-
 
     if current_pnl < BREAKEVEN_TRIGGER:
 
@@ -397,15 +322,12 @@ def move_to_breakeven(
 
     if trade["direction"] == "LONG":
 
-
         if trade["sl"] < trade["entry"]:
 
             trade["sl"] = trade["entry"]
 
 
-
     else:
-
 
         if trade["sl"] > trade["entry"]:
 
@@ -429,7 +351,6 @@ def lock_profit(
     pnl
 ):
 
-
     if pnl < PROFIT_LOCK_TRIGGER:
 
         return trade
@@ -448,7 +369,6 @@ def lock_profit(
     entry = trade["entry"]
 
 
-
     if trade["direction"] == "LONG":
 
         trade["sl"] = (
@@ -462,7 +382,6 @@ def lock_profit(
                 100
             )
         )
-
 
     else:
 
@@ -479,7 +398,6 @@ def lock_profit(
         )
 
 
-
     trade["profit_locked"] = True
 
 
@@ -491,7 +409,7 @@ def lock_profit(
 
 
 # ==========================================
-# TRACK HIGHEST PNL
+# HIGHEST PNL
 # ==========================================
 
 def update_highest_pnl(
@@ -504,9 +422,7 @@ def update_highest_pnl(
         0
     ):
 
-
         trade["highest_pnl"] = pnl
-
 
         save_active_trades()
 
@@ -521,12 +437,10 @@ def should_trailing_exit(
     pnl
 ):
 
-
     highest = trade.get(
         "highest_pnl",
         0
     )
-
 
 
     if highest < TRAILING_START:
@@ -542,23 +456,17 @@ def should_trailing_exit(
     )
 
 
-
-    if drawdown >= TRAILING_GIVEBACK:
-
-        return True
-
-
-
-    return False
+    return (
+        drawdown >= TRAILING_GIVEBACK
+    )
 
 
 
 # ==========================================
-# TRADE EXPIRED
+# TIME EXIT
 # ==========================================
 
 def trade_expired(trade):
-
 
     elapsed = (
 
@@ -574,12 +482,10 @@ def trade_expired(trade):
     )
 
 
-    hours = elapsed / 3600
-
-
-
     return (
-        hours >= MAX_TRADE_HOURS
+        elapsed / 3600
+        >=
+        MAX_TRADE_HOURS
     )
 
 
