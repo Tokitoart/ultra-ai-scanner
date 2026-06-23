@@ -1,3 +1,5 @@
+# trade_manager.py
+
 import time
 import json
 import os
@@ -6,6 +8,8 @@ from config import (
     START_BALANCE,
     MAX_ACTIVE_TRADES,
     BREAKEVEN_TRIGGER,
+    PROFIT_LOCK_TRIGGER,
+    PROFIT_LOCK_VALUE,
     MAX_TRADE_HOURS,
     TRAILING_START,
     TRAILING_GIVEBACK
@@ -24,6 +28,7 @@ ACTIVE_TRADES_FILE = "active_trades.json"
 active_trades = {}
 
 
+
 # ==========================================
 # LOAD ACTIVE TRADES
 # ==========================================
@@ -31,6 +36,7 @@ active_trades = {}
 def load_active_trades():
 
     global active_trades
+
 
     if not os.path.exists(
         ACTIVE_TRADES_FILE
@@ -118,7 +124,6 @@ stats = {
     "losses": 0,
 
     "total_trades": 0
-
 }
 
 
@@ -182,6 +187,11 @@ def open_trade(signal):
     )
 
     signal.setdefault(
+        "profit_locked",
+        False
+    )
+
+    signal.setdefault(
         "open_time",
         time.time()
     )
@@ -210,15 +220,12 @@ def close_trade(
     reason
 ):
 
-
     if symbol not in active_trades:
 
         return None
 
 
-
     trade = active_trades[symbol]
-
 
 
     save_trade(
@@ -229,9 +236,7 @@ def close_trade(
     )
 
 
-
     stats["total_trades"] += 1
-
 
 
     if pnl >= 0:
@@ -247,7 +252,6 @@ def close_trade(
     stats["balance"] *= (
         1 + pnl / 100
     )
-
 
 
     closed_trade = {
@@ -269,7 +273,6 @@ def close_trade(
         "pnl": pnl,
 
         "reason": reason,
-
 
         "adx": trade.get(
             "adx",
@@ -306,7 +309,6 @@ def close_trade(
     save_active_trades()
 
 
-
     print(
         f"🏁 CLOSE {symbol} "
         f"{round(pnl,2)}% "
@@ -315,7 +317,6 @@ def close_trade(
 
 
     return closed_trade
-
 
 
 
@@ -373,7 +374,7 @@ def get_stats():
 
 
 # ==========================================
-# BREAKEVEN
+# MOVE STOP BREAKEVEN
 # ==========================================
 
 def move_to_breakeven(
@@ -419,6 +420,75 @@ def move_to_breakeven(
 
 
 
+# ==========================================
+# PROFIT LOCK
+# ==========================================
+
+def lock_profit(
+    trade,
+    pnl
+):
+
+
+    if pnl < PROFIT_LOCK_TRIGGER:
+
+        return trade
+
+
+
+    if trade.get(
+        "profit_locked",
+        False
+    ):
+
+        return trade
+
+
+
+    entry = trade["entry"]
+
+
+
+    if trade["direction"] == "LONG":
+
+        trade["sl"] = (
+            entry
+            *
+            (
+                1
+                +
+                PROFIT_LOCK_VALUE
+                /
+                100
+            )
+        )
+
+
+    else:
+
+        trade["sl"] = (
+            entry
+            *
+            (
+                1
+                -
+                PROFIT_LOCK_VALUE
+                /
+                100
+            )
+        )
+
+
+
+    trade["profit_locked"] = True
+
+
+    save_active_trades()
+
+
+    return trade
+
+
 
 # ==========================================
 # TRACK HIGHEST PNL
@@ -428,7 +498,6 @@ def update_highest_pnl(
     trade,
     pnl
 ):
-
 
     if pnl > trade.get(
         "highest_pnl",
@@ -440,7 +509,6 @@ def update_highest_pnl(
 
 
         save_active_trades()
-
 
 
 
@@ -458,6 +526,7 @@ def should_trailing_exit(
         "highest_pnl",
         0
     )
+
 
 
     if highest < TRAILING_START:
@@ -481,7 +550,6 @@ def should_trailing_exit(
 
 
     return False
-
 
 
 
@@ -513,7 +581,6 @@ def trade_expired(trade):
     return (
         hours >= MAX_TRADE_HOURS
     )
-
 
 
 
