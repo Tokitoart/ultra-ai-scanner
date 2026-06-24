@@ -1,5 +1,6 @@
 import csv
 import os
+
 from datetime import datetime
 
 from config import (
@@ -15,7 +16,9 @@ from config import (
 def create_journal():
 
     if os.path.exists(JOURNAL_FILE):
+
         return
+
 
     with open(
         JOURNAL_FILE,
@@ -24,28 +27,46 @@ def create_journal():
         encoding="utf-8"
     ) as f:
 
+
         writer = csv.writer(f)
 
+
         writer.writerow([
+
             "time",
+
             "symbol",
+
             "direction",
 
+
             "entry",
+
             "exit",
 
+
             "pnl",
+
             "reason",
 
+
             "adx",
+
             "atr_percent",
+
             "volume_ratio",
+
             "score",
+
 
             "highest_pnl",
 
+            "giveback_percent",
+
             "duration_minutes"
+
         ])
+
 
 
 # ==========================================
@@ -61,16 +82,20 @@ def save_trade(
 
     create_journal()
 
+
     open_time = trade.get(
         "open_time",
         0
     )
 
+
     duration = 0
+
 
     if open_time:
 
         duration = round(
+
             (
                 datetime.now().timestamp()
                 -
@@ -78,8 +103,25 @@ def save_trade(
             )
             /
             60,
+
             2
         )
+
+
+    highest_pnl = trade.get(
+        "highest_pnl",
+        0
+    )
+
+
+    giveback = round(
+
+        highest_pnl
+        -
+        pnl,
+
+        2
+    )
 
 
     with open(
@@ -89,23 +131,31 @@ def save_trade(
         encoding="utf-8"
     ) as f:
 
+
         writer = csv.writer(f)
 
+
         writer.writerow([
+
 
             datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             ),
+
+
 
             trade.get(
                 "symbol",
                 ""
             ),
 
+
+
             trade.get(
                 "direction",
                 ""
             ),
+
 
 
             trade.get(
@@ -114,7 +164,9 @@ def save_trade(
             ),
 
 
+
             exit_price,
+
 
 
             round(
@@ -123,7 +175,9 @@ def save_trade(
             ),
 
 
+
             reason,
+
 
 
             trade.get(
@@ -132,10 +186,12 @@ def save_trade(
             ),
 
 
+
             trade.get(
                 "atr_percent",
                 0
             ),
+
 
 
             trade.get(
@@ -144,21 +200,27 @@ def save_trade(
             ),
 
 
+
             trade.get(
                 "score",
                 0
             ),
 
 
-            trade.get(
-                "highest_pnl",
-                0
-            ),
+
+            highest_pnl,
+
+
+
+            giveback,
+
 
 
             duration
 
         ])
+
+
 
 
 # ==========================================
@@ -169,13 +231,19 @@ def get_stats():
 
     create_journal()
 
+
     wins = 0
+
     losses = 0
+
     trades = 0
+
 
     total_pnl = 0
 
+
     balance = START_BALANCE
+
 
 
     with open(
@@ -188,9 +256,12 @@ def get_stats():
         reader = csv.DictReader(f)
 
 
+
         for row in reader:
 
+
             trades += 1
+
 
 
             pnl = float(
@@ -198,17 +269,23 @@ def get_stats():
             )
 
 
+
             total_pnl += pnl
 
 
+
             balance *= (
+
                 1 + pnl / 100
+
             )
+
 
 
             if pnl >= 0:
 
                 wins += 1
+
 
             else:
 
@@ -216,39 +293,52 @@ def get_stats():
 
 
 
+
     winrate = 0
+
 
 
     if trades > 0:
 
         winrate = round(
-            wins /
+
+            wins
+            /
             trades
             *
             100,
+
             2
         )
 
 
+
     return {
+
 
         "balance": round(
             balance,
             2
         ),
 
+
         "wins": wins,
+
 
         "losses": losses,
 
+
         "total_trades": trades,
 
+
         "winrate": winrate,
+
 
         "total_pnl": round(
             total_pnl,
             2
         )
+
     }
 
 
@@ -259,7 +349,9 @@ def get_stats():
 
 def print_stats():
 
+
     stats = get_stats()
+
 
 
     print(
@@ -267,13 +359,16 @@ def print_stats():
     )
 
 
+
     for key, value in stats.items():
+
 
         print(
             key,
             ":",
             value
         )
+
 
 
     print(
