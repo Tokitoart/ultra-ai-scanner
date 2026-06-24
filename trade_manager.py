@@ -36,6 +36,49 @@ init_database()
 active_trades = load_trades()
 
 
+# ==========================================
+# REMOVE OLD RESTORED TRADES
+# ==========================================
+
+MAX_RESTORE_HOURS = 24
+
+valid_trades = {}
+
+
+for symbol, trade in active_trades.items():
+
+    open_time = trade.get(
+        "open_time",
+        time.time()
+    )
+
+    age_hours = (
+        time.time()
+        -
+        open_time
+    ) / 3600
+
+
+    if age_hours <= MAX_RESTORE_HOURS:
+
+        valid_trades[symbol] = trade
+
+
+    else:
+
+        print(
+            f"🗑 REMOVE OLD TRADE {symbol}"
+        )
+
+
+active_trades = valid_trades
+
+
+save_trades(
+    active_trades
+)
+
+
 
 # ==========================================
 # SAVE DATABASE
@@ -149,7 +192,6 @@ def close_trade(
         return None
 
 
-
     trade = active_trades[symbol]
 
 
@@ -173,11 +215,9 @@ def close_trade(
         stats["losses"] += 1
 
 
-
     stats["balance"] *= (
         1 + pnl / 100
     )
-
 
 
     closed_trade = {
@@ -228,7 +268,6 @@ def close_trade(
     }
 
 
-
     del active_trades[symbol]
 
 
@@ -244,8 +283,6 @@ def close_trade(
 
     return closed_trade
 
-
-
 # ==========================================
 # WINRATE
 # ==========================================
@@ -258,7 +295,6 @@ def get_winrate():
     if trades == 0:
 
         return 0
-
 
 
     return round(
@@ -322,12 +358,14 @@ def move_to_breakeven(
 
     if trade["direction"] == "LONG":
 
+
         if trade["sl"] < trade["entry"]:
 
             trade["sl"] = trade["entry"]
 
 
     else:
+
 
         if trade["sl"] > trade["entry"]:
 
@@ -369,6 +407,7 @@ def lock_profit(
     entry = trade["entry"]
 
 
+
     if trade["direction"] == "LONG":
 
         trade["sl"] = (
@@ -383,6 +422,7 @@ def lock_profit(
             )
         )
 
+
     else:
 
         trade["sl"] = (
@@ -396,6 +436,7 @@ def lock_profit(
                 100
             )
         )
+
 
 
     trade["profit_locked"] = True
@@ -422,7 +463,9 @@ def update_highest_pnl(
         0
     ):
 
+
         trade["highest_pnl"] = pnl
+
 
         save_active_trades()
 
