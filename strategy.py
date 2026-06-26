@@ -6,7 +6,8 @@ from config import (
     ADX_PERIOD,
     MIN_ADX,
     MIN_VOLUME_RATIO,
-    MIN_ATR_PERCENT
+    MIN_ATR_PERCENT,
+    RSI_PERIOD
 )
 
 
@@ -18,13 +19,73 @@ def ema(series, length):
 
     return (
         series
-        .ewm(span=length, adjust=False)
+        .ewm(
+            span=length,
+            adjust=False
+        )
         .mean()
     )
 
 
 # ==========================================
-# TREND 4H
+# RSI
+# ==========================================
+
+def calculate_rsi(
+    df,
+    period=RSI_PERIOD
+):
+
+    delta = df["close"].diff()
+
+    gain = delta.clip(
+        lower=0
+    )
+
+    loss = (
+        -delta.clip(
+            upper=0
+        )
+    )
+
+
+    avg_gain = (
+        gain
+        .rolling(period)
+        .mean()
+    )
+
+
+    avg_loss = (
+        loss
+        .rolling(period)
+        .mean()
+    )
+
+
+    rs = (
+        avg_gain /
+        avg_loss
+    )
+
+
+    rsi = (
+        100 -
+        (
+            100 /
+            (1 + rs)
+        )
+    )
+
+
+    return float(
+        rsi.iloc[-1]
+    )
+
+
+
+# ==========================================
+# TREND
 # ==========================================
 
 def get_trend(df):
@@ -34,6 +95,7 @@ def get_trend(df):
         EMA_FAST
     ).iloc[-1]
 
+
     ema200 = ema(
         df["close"],
         EMA_SLOW
@@ -41,46 +103,16 @@ def get_trend(df):
 
 
     if ema50 > ema200:
+
         return "LONG"
 
 
     if ema50 < ema200:
+
         return "SHORT"
 
 
     return None
-
-
-
-# ==========================================
-# TREND CONFIRM 1H
-# ==========================================
-
-def confirm_trend_1h(df, direction):
-
-    ema20 = ema(
-        df["close"],
-        20
-    ).iloc[-1]
-
-
-    ema50 = ema(
-        df["close"],
-        50
-    ).iloc[-1]
-
-
-    if direction == "LONG":
-
-        return ema20 > ema50
-
-
-    if direction == "SHORT":
-
-        return ema20 < ema50
-
-
-    return False
 
 
 
@@ -108,21 +140,26 @@ def calculate_adx(
     minus_dm[minus_dm < 0] = 0
 
 
+
     tr1 = high - low
 
     tr2 = (
-        high
-        - close.shift()
+        high -
+        close.shift()
     ).abs()
 
     tr3 = (
-        low
-        - close.shift()
+        low -
+        close.shift()
     ).abs()
 
 
     tr = pd.concat(
-        [tr1, tr2, tr3],
+        [
+            tr1,
+            tr2,
+            tr3
+        ],
         axis=1
     ).max(axis=1)
 
@@ -135,43 +172,37 @@ def calculate_adx(
 
 
     plus_di = (
-        100
-        *
-        (
-            plus_dm
-            .rolling(period)
-            .mean()
-            /
-            atr
-        )
+        100 *
+        plus_dm
+        .rolling(period)
+        .mean()
+        /
+        atr
     )
 
 
     minus_di = (
-        100
-        *
-        (
-            minus_dm
-            .rolling(period)
-            .mean()
-            /
-            atr
-        )
+        100 *
+        minus_dm
+        .rolling(period)
+        .mean()
+        /
+        atr
     )
 
 
     dx = (
-        (
-            plus_di
-            -
-            minus_di
-        ).abs()
-        /
-        (
-            plus_di
-            +
+
+        abs(
+            plus_di -
             minus_di
         )
+        /
+        (
+            plus_di +
+            minus_di
+        )
+
     ) * 100
 
 
@@ -189,97 +220,33 @@ def calculate_adx(
 
 
 # ==========================================
-# ATR %
+# ATR
 # ==========================================
 
-def calculate_atr_percent(
-    df,
-    period=14
-):
+def calculate_atr(df, period=14):
 
     high = df["high"]
-
     low = df["low"]
-
     close = df["close"]
 
 
-    tr1 = high - low
+    tr1 = high-low
 
     tr2 = (
-        high
-        -
-        close.shift()
+        high-close.shift()
     ).abs()
 
     tr3 = (
-        low
-        -
-        close.shift()
+        low-close.shift()
     ).abs()
 
 
     tr = pd.concat(
-        [tr1, tr2, tr3],
-        axis=1
-    ).max(axis=1)
-
-
-    atr = (
-        tr
-        .rolling(period)
-        .mean()
-        .iloc[-1]
-    )
-
-
-    price = close.iloc[-1]
-
-
-    if price <= 0:
-        return 0
-
-
-    return round(
-        atr / price * 100,
-        2
-    )
-
-
-
-# ==========================================
-# ATR VALUE
-# ==========================================
-
-def calculate_atr(
-    df,
-    period=14
-):
-
-    high = df["high"]
-
-    low = df["low"]
-
-    close = df["close"]
-
-
-    tr1 = high - low
-
-    tr2 = (
-        high
-        -
-        close.shift()
-    ).abs()
-
-    tr3 = (
-        low
-        -
-        close.shift()
-    ).abs()
-
-
-    tr = pd.concat(
-        [tr1, tr2, tr3],
+        [
+            tr1,
+            tr2,
+            tr3
+        ],
         axis=1
     ).max(axis=1)
 
@@ -294,37 +261,67 @@ def calculate_atr(
 
 
 # ==========================================
-# VOLUME
+# ATR %
 # ==========================================
 
-def volume_ratio(df):
+def calculate_atr_percent(df):
 
-    current_volume = (
-        df["volume"]
+    atr = calculate_atr(df)
+
+    price = (
+        df["close"]
         .iloc[-1]
     )
 
 
-    avg_volume = (
-        df["volume"]
-        .tail(20)
-        .mean()
-    )
+    if price <= 0:
 
-
-    if avg_volume <= 0:
         return 0
 
 
     return round(
-        current_volume / avg_volume,
+        atr /
+        price *
+        100,
         2
     )
 
 
 
 # ==========================================
-# ENTRY SIGNAL 5M
+# VOLUME
+# ==========================================
+
+def volume_ratio(df):
+
+    current = (
+        df["volume"]
+        .iloc[-1]
+    )
+
+
+    average = (
+        df["volume"]
+        .tail(20)
+        .mean()
+    )
+
+
+    if average <= 0:
+
+        return 0
+
+
+    return round(
+        current /
+        average,
+        2
+    )
+
+
+
+# ==========================================
+# ENTRY FILTER
 # ==========================================
 
 def get_entry_signal(df):
@@ -333,6 +330,7 @@ def get_entry_signal(df):
         df["close"],
         20
     )
+
 
     ema50 = ema(
         df["close"],
@@ -346,24 +344,46 @@ def get_entry_signal(df):
     )
 
 
-    distance = (
-        abs(price - ema20.iloc[-1])
+    rsi = calculate_rsi(df)
+
+
+    last_candle = df.iloc[-1]
+
+
+    candle_size = (
+        abs(
+            last_candle["close"]
+            -
+            last_candle["open"]
+        )
         /
-        ema20.iloc[-1]
-    ) * 100
+        last_candle["open"]
+        *
+        100
+    )
 
 
+    # не покупаем после огромной свечи
 
-    # слишком далеко от EMA20 = поздний вход
+    if candle_size > 1.2:
 
-    if distance > 1.2:
         return None
 
 
 
     if (
-        ema20.iloc[-1] > ema50.iloc[-1]
-        and price > ema20.iloc[-1]
+        ema20.iloc[-1]
+        >
+        ema50.iloc[-1]
+
+        and
+
+        price >
+        ema20.iloc[-1]
+
+        and
+
+        rsi > 52
     ):
 
         return "LONG"
@@ -371,8 +391,18 @@ def get_entry_signal(df):
 
 
     if (
-        ema20.iloc[-1] < ema50.iloc[-1]
-        and price < ema20.iloc[-1]
+        ema20.iloc[-1]
+        <
+        ema50.iloc[-1]
+
+        and
+
+        price <
+        ema20.iloc[-1]
+
+        and
+
+        rsi < 48
     ):
 
         return "SHORT"
@@ -395,71 +425,99 @@ def build_signal(
     df5
 ):
 
-    trend = get_trend(df4h)
+
+    trend = get_trend(
+        df4h
+    )
 
 
     if not trend:
+
         return None
 
 
 
-    if not confirm_trend_1h(
-        df1h,
-        trend
-    ):
+    # дополнительное подтверждение 1H
+
+    trend_1h = get_trend(
+        df1h
+    )
+
+
+    if trend != trend_1h:
+
         return None
 
 
 
-    adx = calculate_adx(df1h)
+    adx = calculate_adx(
+        df1h
+    )
 
 
     if adx < MIN_ADX:
+
         return None
 
 
 
-    atr_percent = calculate_atr_percent(df15)
+    atr_percent = calculate_atr_percent(
+        df15
+    )
 
 
     if atr_percent < MIN_ATR_PERCENT:
+
         return None
 
 
 
-    volume = volume_ratio(df5)
+    volume = volume_ratio(
+        df5
+    )
 
 
     if volume < MIN_VOLUME_RATIO:
+
         return None
 
 
 
-    trigger = get_entry_signal(df5)
+    trigger = get_entry_signal(
+        df5
+    )
 
 
     if trigger != trend:
+
         return None
 
 
 
     entry = float(
-        df5["close"].iloc[-1]
+        df5["close"]
+        .iloc[-1]
     )
 
 
-    atr = calculate_atr(df15)
-
+    atr = calculate_atr(
+        df15
+    )
 
 
     if trend == "LONG":
 
-        sl = entry - atr * 1.5
-
+        sl = (
+            entry -
+            atr * 2
+        )
 
     else:
 
-        sl = entry + atr * 1.5
+        sl = (
+            entry +
+            atr * 2
+        )
 
 
 
@@ -469,11 +527,20 @@ def build_signal(
 
         "direction": trend,
 
-        "entry": round(entry, 6),
+        "entry": round(
+            entry,
+            6
+        ),
 
-        "sl": round(sl, 6),
+        "sl": round(
+            sl,
+            6
+        ),
 
-        "adx": round(adx, 2),
+        "adx": round(
+            adx,
+            2
+        ),
 
         "atr_percent": atr_percent,
 
