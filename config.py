@@ -81,7 +81,7 @@ EMA_SLOW = 200
 
 ADX_PERIOD = 14
 
-MIN_ADX = 25
+MIN_ADX = 30
 
 
 
@@ -111,7 +111,7 @@ ATR_MULTIPLIER = 1.0
 # VOLUME FILTER
 # ==========================================
 
-MIN_VOLUME_RATIO = 1.5
+MIN_VOLUME_RATIO = 1.8
 
 
 
