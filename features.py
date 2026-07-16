@@ -1,89 +1,75 @@
-# features.py
-
 from datetime import datetime
 
 
-def build_features(
+def build_features(signal):
 
-    symbol,
-    direction,
-    entry,
-
-    ema20,
-    ema50,
-    ema200,
-
-    rsi5,
-    rsi15,
-
-    adx,
-    di_plus,
-    di_minus,
-
-    atr,
-    atr_percent,
-
-    volume,
-    avg_volume,
-    volume_ratio,
-
-    price_change_5m,
-    price_change_15m,
-    price_change_1h,
-
-    btc_trend
-
-):
+    now = datetime.utcnow()
 
     features = {
 
-        "symbol": symbol,
-        "direction": direction,
-        "entry": entry,
+        # ==========================
+        # MARKET
+        # ==========================
 
-        # EMA
-        "ema20": ema20,
-        "ema50": ema50,
-        "ema200": ema200,
+        "symbol": signal.get("symbol"),
 
-        "dist_ema20":
-            round((entry - ema20) / ema20 * 100, 3),
+        "direction": signal.get("direction"),
 
-        "dist_ema50":
-            round((entry - ema50) / ema50 * 100, 3),
+        "entry": signal.get("entry"),
 
-        "dist_ema200":
-            round((entry - ema200) / ema200 * 100, 3),
+        # ==========================
+        # TIME
+        # ==========================
 
-        # RSI
-        "rsi5": rsi5,
-        "rsi15": rsi15,
+        "hour": now.hour,
 
-        # Trend
-        "adx": adx,
-        "di_plus": di_plus,
-        "di_minus": di_minus,
+        "weekday": now.weekday(),
 
-        # Volatility
-        "atr": atr,
-        "atr_percent": atr_percent,
+        "month": now.month,
 
-        # Volume
-        "volume": volume,
-        "avg_volume": avg_volume,
-        "volume_ratio": volume_ratio,
+        # ==========================
+        # TREND
+        # ==========================
 
-        # Price
-        "change5": price_change_5m,
-        "change15": price_change_15m,
-        "change1h": price_change_1h,
+        "adx": signal.get("adx", 0),
 
-        # Market
-        "btc_trend": btc_trend,
+        "score": signal.get("score", 0),
 
-        # Time
-        "hour": datetime.utcnow().hour,
-        "weekday": datetime.utcnow().weekday()
+        # ==========================
+        # VOLATILITY
+        # ==========================
+
+        "atr_percent": signal.get("atr_percent", 0),
+
+        # ==========================
+        # VOLUME
+        # ==========================
+
+        "volume_ratio": signal.get("volume_ratio", 0),
+
+        # ==========================
+        # PLACEHOLDERS
+        # ==========================
+
+        "ema_distance": 0,
+
+        "ema_slope": 0,
+
+        "rsi_5m": 0,
+
+        "rsi_15m": 0,
+
+        "macd": 0,
+
+        "macd_hist": 0,
+
+        "bb_width": 0,
+
+        "vwap_distance": 0,
+
+        "btc_trend": 0,
+
+        "market_regime": "",
 
     }
 
