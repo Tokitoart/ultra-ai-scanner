@@ -13,6 +13,8 @@ from config import (
 
 from journal import save_trade
 
+from features import save_features
+
 from database import (
     init_database,
     load_trades,
@@ -200,6 +202,12 @@ def close_trade(
         exit_price,
         pnl,
         reason
+    )
+
+    save_features(
+    trade,
+    pnl,
+    reason
     )
 
 
