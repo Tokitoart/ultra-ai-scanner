@@ -1,6 +1,6 @@
 import os
-import psycopg2
 import json
+import psycopg2
 
 
 # ==========================================
@@ -18,7 +18,7 @@ def get_conn():
 
 
 # ==========================================
-# INIT TABLES
+# INIT DATABASE
 # ==========================================
 
 def init_database():
@@ -26,10 +26,12 @@ def init_database():
     conn = get_conn()
     cur = conn.cursor()
 
-    # Открытые сделки
+    # --------------------------------------
+    # ACTIVE TRADES
+    # --------------------------------------
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS active_trades (
+        CREATE TABLE IF NOT EXISTS active_trades(
 
             symbol TEXT PRIMARY KEY,
 
@@ -38,14 +40,17 @@ def init_database():
         )
     """)
 
-    # История сделок
+    # --------------------------------------
+    # TRADE HISTORY
+    # --------------------------------------
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS trade_history (
+
+        CREATE TABLE IF NOT EXISTS trade_history(
 
             id SERIAL PRIMARY KEY,
 
-            close_time TIMESTAMP DEFAULT NOW(),
+            created_at TIMESTAMP DEFAULT NOW(),
 
             symbol TEXT,
 
@@ -59,19 +64,68 @@ def init_database():
 
             reason TEXT,
 
+            score DOUBLE PRECISION,
+
             adx DOUBLE PRECISION,
+
+            di_plus DOUBLE PRECISION,
+
+            di_minus DOUBLE PRECISION,
+
+            atr DOUBLE PRECISION,
 
             atr_percent DOUBLE PRECISION,
 
+            volume DOUBLE PRECISION,
+
+            avg_volume DOUBLE PRECISION,
+
             volume_ratio DOUBLE PRECISION,
 
-            score DOUBLE PRECISION,
+            ema20 DOUBLE PRECISION,
+
+            ema50 DOUBLE PRECISION,
+
+            ema200 DOUBLE PRECISION,
+
+            ema_distance DOUBLE PRECISION,
+
+            ema_slope DOUBLE PRECISION,
+
+            rsi_5m DOUBLE PRECISION,
+
+            rsi_15m DOUBLE PRECISION,
+
+            macd DOUBLE PRECISION,
+
+            macd_hist DOUBLE PRECISION,
+
+            bb_width DOUBLE PRECISION,
+
+            vwap_distance DOUBLE PRECISION,
+
+            btc_trend TEXT,
+
+            market_regime TEXT,
+
+            price_change_5m DOUBLE PRECISION,
+
+            price_change_15m DOUBLE PRECISION,
+
+            price_change_1h DOUBLE PRECISION,
+
+            hour INTEGER,
+
+            weekday INTEGER,
+
+            month INTEGER,
 
             highest_pnl DOUBLE PRECISION,
 
             duration_minutes DOUBLE PRECISION
 
         )
+
     """)
 
     conn.commit()
@@ -103,14 +157,16 @@ def load_trades():
 
     trades = {}
 
-    for row in rows:
+    for symbol, data in rows:
 
-        trades[row[0]] = row[1]
+        trades[symbol] = data
 
     cur.close()
     conn.close()
 
-    print(f"✅ LOADED {len(trades)} ACTIVE TRADES FROM DATABASE")
+    print(
+        f"✅ LOADED {len(trades)} ACTIVE TRADES"
+    )
 
     return trades
 
@@ -130,30 +186,35 @@ def save_trades(trades):
 
     """)
 
-    for symbol,data in trades.items():
+    for symbol, data in trades.items():
 
         cur.execute("""
 
-            INSERT INTO active_trades
+            INSERT INTO active_trades(
 
-            (
                 symbol,
+
                 data
+
             )
 
-            VALUES
-            (
+            VALUES(
+
                 %s,
+
                 %s
+
             )
 
             ON CONFLICT(symbol)
 
             DO UPDATE
 
-            SET data=EXCLUDED.data
+            SET data = EXCLUDED.data
 
-        """,(
+        """,
+
+        (
 
             symbol,
 
@@ -166,24 +227,11 @@ def save_trades(trades):
     cur.close()
     conn.close()
 
-
 # ==========================================
-# SAVE CLOSED TRADE
+# SAVE CLOSED TRADE TO HISTORY
 # ==========================================
 
-def save_trade_history(
-
-        trade,
-
-        exit_price,
-
-        pnl,
-
-        reason,
-
-        duration
-
-):
+def save_trade_history(trade):
 
     conn = get_conn()
     cur = conn.cursor()
@@ -193,27 +241,55 @@ def save_trade_history(
         INSERT INTO trade_history(
 
             symbol,
-
             direction,
-
             entry,
-
             exit,
-
             pnl,
-
             reason,
-
-            adx,
-
-            atr_percent,
-
-            volume_ratio,
 
             score,
 
-            highest_pnl,
+            adx,
+            di_plus,
+            di_minus,
 
+            atr,
+            atr_percent,
+
+            volume,
+            avg_volume,
+            volume_ratio,
+
+            ema20,
+            ema50,
+            ema200,
+
+            ema_distance,
+            ema_slope,
+
+            rsi_5m,
+            rsi_15m,
+
+            macd,
+            macd_hist,
+
+            bb_width,
+
+            vwap_distance,
+
+            btc_trend,
+
+            market_regime,
+
+            price_change_5m,
+            price_change_15m,
+            price_change_1h,
+
+            hour,
+            weekday,
+            month,
+
+            highest_pnl,
             duration_minutes
 
         )
@@ -222,11 +298,41 @@ def save_trade_history(
 
             %s,%s,%s,%s,%s,%s,
 
-            %s,%s,%s,%s,%s,%s
+            %s,
+
+            %s,%s,%s,
+
+            %s,%s,
+
+            %s,%s,%s,
+
+            %s,%s,%s,
+
+            %s,%s,
+
+            %s,%s,
+
+            %s,%s,
+
+            %s,
+
+            %s,
+
+            %s,
+
+            %s,
+
+            %s,%s,%s,
+
+            %s,%s,%s,
+
+            %s,%s
 
         )
 
-    """,(
+    """,
+
+    (
 
         trade.get("symbol"),
 
@@ -234,23 +340,71 @@ def save_trade_history(
 
         trade.get("entry"),
 
-        exit_price,
+        trade.get("exit"),
 
-        pnl,
+        trade.get("pnl"),
 
-        reason,
+        trade.get("reason"),
 
-        trade.get("adx",0),
+        trade.get("score"),
 
-        trade.get("atr_percent",0),
+        trade.get("adx"),
 
-        trade.get("volume_ratio",0),
+        trade.get("di_plus"),
 
-        trade.get("score",0),
+        trade.get("di_minus"),
 
-        trade.get("highest_pnl",0),
+        trade.get("atr"),
 
-        duration
+        trade.get("atr_percent"),
+
+        trade.get("volume"),
+
+        trade.get("avg_volume"),
+
+        trade.get("volume_ratio"),
+
+        trade.get("ema20"),
+
+        trade.get("ema50"),
+
+        trade.get("ema200"),
+
+        trade.get("ema_distance"),
+
+        trade.get("ema_slope"),
+
+        trade.get("rsi_5m"),
+
+        trade.get("rsi_15m"),
+
+        trade.get("macd"),
+
+        trade.get("macd_hist"),
+
+        trade.get("bb_width"),
+
+        trade.get("vwap_distance"),
+
+        trade.get("btc_trend"),
+
+        trade.get("market_regime"),
+
+        trade.get("price_change_5m"),
+
+        trade.get("price_change_15m"),
+
+        trade.get("price_change_1h"),
+
+        trade.get("hour"),
+
+        trade.get("weekday"),
+
+        trade.get("month"),
+
+        trade.get("highest_pnl"),
+
+        trade.get("duration_minutes")
 
     ))
 
@@ -261,9 +415,66 @@ def save_trade_history(
 
 
 # ==========================================
-# START DATABASE
+# LOAD HISTORY
+# ==========================================
+
+def load_trade_history():
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+
+        SELECT *
+
+        FROM trade_history
+
+        ORDER BY id
+
+    """)
+
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return rows
+
+
+# ==========================================
+# HISTORY COUNT
+# ==========================================
+
+def trade_history_count():
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+
+        SELECT COUNT(*)
+
+        FROM trade_history
+
+    """)
+
+    count = cur.fetchone()[0]
+
+    cur.close()
+    conn.close()
+
+    return count
+
+
+# ==========================================
+# START
 # ==========================================
 
 if __name__ == "__main__":
 
     init_database()
+
+    print(
+        "Trades in history:",
+        trade_history_count()
+    )
